@@ -18,10 +18,9 @@ QUY TẮC PHÂN TÍCH:
    - neutral: đề cập trung tính hoặc không có thái độ rõ ràng
 
 3. TRÍCH XUẤT KEYWORDS:
-   - CHỈ lấy keywords từ danh sách keywords đã cho: {keywords}
-   - Chỉ trả về keywords nào thực sự xuất hiện trong nội dung
+   - Chỉ lấy từ/cụm từ tiếng Việt liên quan TRỰC TIẾP đến chủ đề
    - Phân loại theo sentiment của từng keyword đối với chủ đề
-   - KHÔNG tạo ra keywords mới ngoài danh sách đã cho
+   - Không lấy từ khóa chung chung không liên quan
 
 4. CONFIDENCE:
    - 0.8-1.0: có từ khóa rõ ràng, sentiment chắc chắn
@@ -34,12 +33,10 @@ QUY TẮC PHÂN TÍCH:
    - Tập trung vào mối liên hệ với chủ đề
 
 VÍ DỤ:
-Chủ đề: "Dyson"
-Keywords: ["dyson", "dsyon", "máy lọc không khí"]
+Chủ đề: "máy lọc không khí"
 Text: "máy lọc dyson 30 củ đắt quá nhưng hiệu quả"
 → sentiment: "positive" (hiệu quả tốt dù đắt)
-→ keywords: {{"positive": [], "negative": [], "neutral": ["dyson"]}}
-(Chỉ trả về "dyson" vì nó có trong danh sách keywords, không trả về "hiệu quả" hay "đắt")
+→ keywords: {{"positive": ["hiệu quả"], "negative": ["đắt"], "neutral": ["dyson", "máy lọc"]}}
 
 QUAN TRỌNG: Chỉ trả về JSON thuần túy, không có text thêm trước hoặc sau.
 
@@ -58,9 +55,9 @@ QUAN TRỌNG: Chỉ trả về JSON thuần túy, không có text thêm trước
 Chỉ trả về JSON, không có markdown hoặc text khác."""
 
 GENERAL_SENTIMENT_PROMPT = """
-Bạn là chuyên gia phân tích sentiment tiếng Việt. Hãy phân tích sentiment tổng quan của nội dung sau:
+Bạn là chuyên gia phân tích sentiment tiếng Việt. Hãy phân tích sentiment tổng quan của nội dung đã được gộp sau:
 
-NỘI DUNG: "{text}"
+NỘI DUNG GỘP (title + content + description): "{text}"
 
 QUY TẮC PHÂN TÍCH:
 
@@ -70,10 +67,12 @@ QUY TẮC PHÂN TÍCH:
    - neutral: nội dung trung tính, không có cảm xúc rõ ràng
 
 2. TRÍCH XUẤT KEYWORDS:
-   - CHỈ lấy các từ/cụm từ thể hiện cảm xúc CHÍNH trong nội dung
+   - CHỈ lấy các từ/cụm từ thể hiện cảm xúc CHÍNH trong toàn bộ văn bản gộp
    - Tránh lấy quá nhiều keywords không quan trọng
-   - Phân loại theo sentiment của từng keyword
-   - Nếu nội dung quá chung chung, có thể trả về keywords rỗng
+   - Phân loại từng keyword vào sentiment tương ứng:
+     * positive: từ/cụm từ thể hiện cảm xúc tích cực
+     * negative: từ/cụm từ thể hiện cảm xúc tiêu cực  
+     * neutral: từ/cụm từ trung tính hoặc không rõ cảm xúc
 
 3. CONFIDENCE:
    - 0.7-1.0: sentiment rất rõ ràng
