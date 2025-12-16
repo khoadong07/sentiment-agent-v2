@@ -31,3 +31,8 @@ REQUEST_TIMEOUT = int(os.getenv("REQUEST_TIMEOUT", "60"))
 
 # Logging
 LOG_LEVEL = os.getenv("LOG_LEVEL", "INFO")
+
+# Langfuse Configuration
+LANGFUSE_SECRET_KEY = os.getenv("LANGFUSE_SECRET_KEY", "")
+LANGFUSE_PUBLIC_KEY = os.getenv("LANGFUSE_PUBLIC_KEY", "")
+LANGFUSE_HOST = os.getenv("LANGFUSE_HOST", "https://api.langfuse.com")

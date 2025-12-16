@@ -12,7 +12,8 @@ test_data = {
     "title": "Xem xong cũng làm thử, trời ơi đầu tư ngay cái máy lọc kk dyson 30 củ đi, k có tí bụi mịn nào bay luôn",
     "content": "",
     "description": "T có phải nạn nhân của máy lọc không khí ko tụi bay. Hay t đã sai ở bước nào????  maylockhongkhi  sharp  xuhuong  tiktok",
-    "type": "fbGroupTopic"
+    "type": "fbGroupTopic",
+    "main_keywords": ["dyson","dsyon","dysom","dysson","dysonn","disson","dyxom"]
 }
 
 def test_analyze_endpoint():
@@ -31,6 +32,28 @@ def test_analyze_endpoint():
             result = response.json()
             print("\nKết quả phân tích:")
             print(json.dumps(result, ensure_ascii=False, indent=2))
+            
+            # Kiểm tra response format
+            print("\n=== Validation ===")
+            required_fields = ["id", "index", "type", "targeted", "sentiment", "confidence", "keywords", "explanation"]
+            missing_fields = [field for field in required_fields if field not in result]
+            
+            if missing_fields:
+                print(f"❌ Missing fields: {missing_fields}")
+            else:
+                print("✅ All required fields present")
+                
+            # Kiểm tra id và type có khớp với request không
+            if result.get("id") == test_data["id"]:
+                print("✅ ID matches request")
+            else:
+                print(f"❌ ID mismatch: expected {test_data['id']}, got {result.get('id')}")
+                
+            if result.get("type") == test_data["type"]:
+                print("✅ Type matches request")
+            else:
+                print(f"❌ Type mismatch: expected {test_data['type']}, got {result.get('type')}")
+                
         else:
             print(f"Error: {response.text}")
             

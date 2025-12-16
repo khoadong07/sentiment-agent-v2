@@ -6,6 +6,17 @@ from app.prompts import SENTIMENT_ANALYSIS_PROMPT, GENERAL_SENTIMENT_PROMPT
 
 logger = logging.getLogger(__name__)
 
+def get_invoke_config():
+    """
+    Trả về config cho llm.invoke nếu langfuse_handler khả dụng.
+    Nếu không, trả về {} để tránh NameError.
+    """
+    try:
+        from app.langfuse import langfuse_handler  # noqa: WPS433 (dynamic import)
+        return {"callbacks": [langfuse_handler]}
+    except Exception:
+        return {}
+
 def analyze_with_llm(state):
     """
     Optimized LLM analysis với text preprocessing và error handling
@@ -55,7 +66,7 @@ def analyze_with_llm(state):
         )
         
         # Gọi LLM với retry logic
-        response = llm.invoke(prompt)
+        response = llm.invoke(prompt, config=get_invoke_config())
         
         # Parse và validate JSON response
         analysis_result = parse_llm_response(response.content)
@@ -153,7 +164,7 @@ def analyze_general_sentiment(text: str) -> dict:
         prompt = GENERAL_SENTIMENT_PROMPT.format(text=text[:800])  # Limit text length
         
         # Call LLM
-        response = llm.invoke(prompt)
+        response = llm.invoke(prompt, config=get_invoke_config())
         
         # Parse response
         analysis_result = parse_llm_response(response.content)

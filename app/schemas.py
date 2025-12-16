@@ -16,7 +16,9 @@ class KeywordSentiment(BaseModel):
     negative: List[str] = []
 
 class AnalysisResult(BaseModel):
+    id: str
     index: str
+    type: str
     targeted: bool
     sentiment: str
     confidence: float

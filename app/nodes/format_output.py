@@ -27,7 +27,9 @@ def format_output(state):
         
         # Tạo kết quả cuối cùng
         result = {
+            "id": input_data.get("id", ""),
             "index": input_data["index"],
+            "type": input_data.get("type", ""),
             "targeted": targeted,
             "sentiment": sentiment,
             "confidence": llm_analysis.get("confidence", 0.0),

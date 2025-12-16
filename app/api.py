@@ -116,7 +116,9 @@ async def analyze_sentiment(request: Request, post: PostInput, background_tasks:
             except asyncio.TimeoutError:
                 logger.error(f"Request timeout after {REQUEST_TIMEOUT}s")
                 return {
+                    "id": input_data.get("id", ""),
                     "index": input_data.get("index", ""),
+                    "type": input_data.get("type", ""),
                     "targeted": False,
                     "sentiment": "neutral",
                     "confidence": 0.0,
@@ -127,7 +129,9 @@ async def analyze_sentiment(request: Request, post: PostInput, background_tasks:
         except Exception as e:
             logger.error(f"Internal error: {str(e)}")
             return {
+                "id": input_data.get("id", "") if 'input_data' in locals() else "",
                 "index": input_data.get("index", "") if 'input_data' in locals() else "",
+                "type": input_data.get("type", "") if 'input_data' in locals() else "",
                 "targeted": False,
                 "sentiment": "neutral",
                 "confidence": 0.0,
@@ -143,7 +147,9 @@ def process_analysis(input_data: dict) -> dict:
         
         # Ensure result is completely serializable
         clean_result = {
+            "id": str(input_data.get("id", "")),
             "index": str(result.get("index", "")),
+            "type": str(input_data.get("type", "")),
             "targeted": bool(result.get("targeted", False)),
             "sentiment": str(result.get("sentiment", "neutral")),
             "confidence": float(result.get("confidence", 0.0)),
@@ -161,7 +167,9 @@ def process_analysis(input_data: dict) -> dict:
         logger.error(f"Process analysis error: {str(e)}")
         # Return a clean error response instead of raising
         return {
+            "id": input_data.get("id", ""),
             "index": input_data.get("index", ""),
+            "type": input_data.get("type", ""),
             "targeted": False,
             "sentiment": "neutral",
             "confidence": 0.0,
