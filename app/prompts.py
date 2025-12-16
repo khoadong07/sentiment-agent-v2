@@ -53,3 +53,42 @@ QUAN TRỌNG: Chỉ trả về JSON thuần túy, không có text thêm trước
 }}
 
 Chỉ trả về JSON, không có markdown hoặc text khác."""
+
+GENERAL_SENTIMENT_PROMPT = """
+Bạn là chuyên gia phân tích sentiment tiếng Việt. Hãy phân tích sentiment tổng quan của nội dung sau:
+
+NỘI DUNG: "{text}"
+
+QUY TẮC PHÂN TÍCH:
+
+1. PHÂN TÍCH SENTIMENT TỔNG QUAN:
+   - positive: nội dung tích cực, vui vẻ, hài lòng
+   - negative: nội dung tiêu cực, buồn bã, không hài lòng
+   - neutral: nội dung trung tính, không có cảm xúc rõ ràng
+
+2. TRÍCH XUẤT KEYWORDS:
+   - Lấy các từ/cụm từ thể hiện cảm xúc trong nội dung
+   - Phân loại theo sentiment của từng keyword
+
+3. CONFIDENCE:
+   - 0.7-1.0: sentiment rất rõ ràng
+   - 0.4-0.6: sentiment khá rõ ràng
+   - 0.0-0.3: sentiment không rõ ràng hoặc trung tính
+
+4. EXPLANATION:
+   - Tối đa 20 từ tiếng Việt
+   - Giải thích sentiment tổng quan
+
+QUAN TRỌNG: Chỉ trả về JSON thuần túy, không có text thêm.
+
+ĐỊNH DẠNG OUTPUT (JSON):
+{{
+  "sentiment": "positive|negative|neutral",
+  "confidence": 0.0,
+  "keywords": {{
+    "positive": [],
+    "negative": [], 
+    "neutral": []
+  }},
+  "explanation": "Sentiment tổng quan của nội dung"
+}}"""

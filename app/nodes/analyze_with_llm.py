@@ -2,7 +2,7 @@ import json
 import logging
 import re
 from app.llm import llm
-from app.prompts import SENTIMENT_ANALYSIS_PROMPT
+from app.prompts import SENTIMENT_ANALYSIS_PROMPT, GENERAL_SENTIMENT_PROMPT
 
 logger = logging.getLogger(__name__)
 
@@ -35,18 +35,15 @@ def analyze_with_llm(state):
         all_keywords = main_keywords
         topic_name = main_keywords[0] if main_keywords else "Unknown"
         
-        # Quick keyword check - nếu không có keyword nào thì return neutral
-        if not main_keywords or not any(keyword.lower() in processed_text.lower() for keyword in all_keywords):
-            logger.info("No relevant keywords found, returning neutral")
-            return {
-                **state,
-                "llm_analysis": {
-                    "sentiment": "neutral", 
-                    "confidence": 0.2,
-                    "keywords": {"positive": [], "negative": [], "neutral": []},
-                    "explanation": "Không tìm thấy từ khóa liên quan"
-                }
-            }
+        # Check if keywords are mentioned
+        keywords_mentioned = main_keywords and any(keyword.lower() in processed_text.lower() for keyword in all_keywords)
+        
+        if not keywords_mentioned:
+            logger.info("No keywords mentioned, analyzing general sentiment")
+            # Analyze general sentiment when keywords are not mentioned
+            general_analysis = analyze_general_sentiment(processed_text)
+            general_analysis["explanation"] = f"Nội dung không đề cập đến main keywords. {general_analysis['explanation']}"
+            return {**state, "llm_analysis": general_analysis}
         
         logger.debug(f"Analyzing keywords: {main_keywords}, text length: {len(processed_text)}")
         
@@ -133,7 +130,7 @@ def parse_llm_response(response_content: str) -> dict:
         result["keywords"] = keywords
         
         # Limit explanation length
-        explanation = str(result.get("explanation", ""))[:100]
+        explanation = str(result.get("explanation", ""))
         result["explanation"] = explanation
         
         logger.info(f"Successfully parsed LLM response: {result['sentiment']}")
@@ -146,6 +143,36 @@ def parse_llm_response(response_content: str) -> dict:
         # Try to extract basic info from text if JSON fails
         fallback_result = extract_fallback_analysis(response_content)
         return fallback_result
+
+def analyze_general_sentiment(text: str) -> dict:
+    """Analyze general sentiment when keywords are not mentioned"""
+    try:
+        logger.debug(f"Analyzing general sentiment for text length: {len(text)}")
+        
+        # Create general sentiment prompt
+        prompt = GENERAL_SENTIMENT_PROMPT.format(text=text[:800])  # Limit text length
+        
+        # Call LLM
+        response = llm.invoke(prompt)
+        
+        # Parse response
+        analysis_result = parse_llm_response(response.content)
+        
+        # Lower confidence since keywords are not mentioned
+        analysis_result["confidence"] = min(analysis_result.get("confidence", 0.0), 0.6)
+        
+        logger.debug(f"General sentiment analysis: {analysis_result.get('sentiment')}")
+        
+        return analysis_result
+        
+    except Exception as e:
+        logger.error(f"General sentiment analysis error: {str(e)}")
+        return {
+            "sentiment": "neutral",
+            "confidence": 0.1,
+            "keywords": {"positive": [], "negative": [], "neutral": []},
+            "explanation": "Sentiment tổng quan trung tính"
+        }
 
 def extract_fallback_analysis(response_content: str) -> dict:
     """Extract basic sentiment info from non-JSON response"""
