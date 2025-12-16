@@ -28,7 +28,7 @@ services:
     environment: &api-env
       - MONGO_URI=${MONGO_URI}
       - DB_NAME=${DB_NAME:-n8n}
-      - REDIS_URL=redis://redis:6379
+      - REDIS_URL=redis://redis:16379
       - OPENAI_API_KEY=${OPENAI_API_KEY}
       - LOG_LEVEL=INFO
       # High-performance MongoDB settings
@@ -74,7 +74,7 @@ services:
   redis:
     image: redis:7.2-alpine
     ports:
-      - "6379:6379"
+      - "16379:6379"
     volumes:
       - redis_data:/data
       - ./redis.conf:/usr/local/etc/redis/redis.conf
