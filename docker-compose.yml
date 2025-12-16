@@ -1,0 +1,97 @@
+services:
+  # Load Balancer với Nginx
+  nginx:
+    image: nginx:alpine
+    ports:
+      - "4880:80"
+      - "443:443"
+    volumes:
+      - ./nginx.conf:/etc/nginx/nginx.conf
+      - ./logs/nginx:/var/log/nginx
+    depends_on:
+      - sentiment-api-1
+      - sentiment-api-2
+      - sentiment-api-3
+    restart: unless-stopped
+    deploy:
+      resources:
+        limits:
+          memory: 512M
+        reservations:
+          memory: 256M
+
+  # Multiple API instances for high availability
+  sentiment-api-1: &api-service
+    build: .
+    expose:
+      - "8000"
+    environment: &api-env
+      - MONGO_URI=${MONGO_URI}
+      - DB_NAME=${DB_NAME:-n8n}
+      - REDIS_URL=redis://redis:6379
+      - OPENAI_API_KEY=${OPENAI_API_KEY}
+      - LOG_LEVEL=INFO
+      # High-performance MongoDB settings
+      - MONGO_MAX_POOL_SIZE=200
+      - MONGO_MIN_POOL_SIZE=20
+      - MONGO_MAX_IDLE_TIME_MS=60000
+      # High concurrency settings
+      - MAX_CONCURRENT_REQUESTS=100
+      - REQUEST_TIMEOUT=45
+      # Cache settings
+      - CACHE_TTL=7200
+      # OpenAI settings
+      - OPENAI_MAX_RETRIES=5
+      - OPENAI_TIMEOUT=45
+      - OPENAI_MAX_TOKENS=800
+    depends_on:
+      - redis
+    restart: unless-stopped
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
+      interval: 20s
+      timeout: 5s
+      retries: 3
+      start_period: 30s
+    deploy:
+      resources:
+        limits:
+          memory: 2G
+          cpus: '1.0'
+        reservations:
+          memory: 1G
+          cpus: '0.5'
+
+  sentiment-api-2:
+    <<: *api-service
+    
+  sentiment-api-3:
+    <<: *api-service
+
+  # High-performance Redis cluster
+  redis:
+    image: redis:7.2-alpine
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis_data:/data
+      - ./redis.conf:/usr/local/etc/redis/redis.conf
+    restart: unless-stopped
+    command: redis-server /usr/local/etc/redis/redis.conf
+    deploy:
+      resources:
+        limits:
+          memory: 1G
+        reservations:
+          memory: 512M
+    sysctls:
+      - net.core.somaxconn=65535
+
+
+
+
+
+volumes:
+  redis_data:
