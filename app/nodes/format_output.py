@@ -7,9 +7,9 @@ def format_output(state):
     Format kết quả cuối cùng theo schema yêu cầu
     """
     try:
-        topic = state["topic"]
         llm_analysis = state["llm_analysis"]
         input_data = state["input_data"]
+        main_keywords = input_data.get("main_keywords", [])
         
         # Xác định xem content có target đến keyword hay không
         sentiment = llm_analysis.get("sentiment", "neutral")
@@ -29,7 +29,6 @@ def format_output(state):
         result = {
             "index": input_data["index"],
             "targeted": targeted,
-            "topic": topic.get("topic_name", ""),
             "sentiment": sentiment,
             "confidence": llm_analysis.get("confidence", 0.0),
             "keywords": keywords,

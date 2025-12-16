@@ -11,8 +11,9 @@ def analyze_with_llm(state):
     Optimized LLM analysis với text preprocessing và error handling
     """
     try:
-        topic = state["topic"]
+        input_data = state["input_data"]
         merged_text = state["merged_text"]
+        main_keywords = input_data.get("main_keywords", [])
         
         # Early exit nếu text quá ngắn
         if len(merged_text.strip()) < 5:
@@ -30,13 +31,12 @@ def analyze_with_llm(state):
         # Preprocessing text để tối ưu LLM
         processed_text = preprocess_text(merged_text)
         
-        # Chuẩn bị keywords
-        topic_keywords = topic.get("keywords", [])
-        topic_name = topic.get("topic_name", "")
-        all_keywords = topic_keywords + [topic_name.lower()] if topic_name else topic_keywords
+        # Sử dụng main_keywords trực tiếp
+        all_keywords = main_keywords
+        topic_name = main_keywords[0] if main_keywords else "Unknown"
         
         # Quick keyword check - nếu không có keyword nào thì return neutral
-        if not any(keyword.lower() in processed_text.lower() for keyword in all_keywords):
+        if not main_keywords or not any(keyword.lower() in processed_text.lower() for keyword in all_keywords):
             logger.info("No relevant keywords found, returning neutral")
             return {
                 **state,
@@ -48,7 +48,7 @@ def analyze_with_llm(state):
                 }
             }
         
-        logger.debug(f"Analyzing topic: {topic_name}, text length: {len(processed_text)}")
+        logger.debug(f"Analyzing keywords: {main_keywords}, text length: {len(processed_text)}")
         
         # Tạo prompt tối ưu
         prompt = SENTIMENT_ANALYSIS_PROMPT.format(

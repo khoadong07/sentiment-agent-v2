@@ -8,6 +8,7 @@ class PostInput(BaseModel):
     content: Optional[str] = ""
     description: Optional[str] = ""
     type: Optional[str] = ""
+    main_keywords: List[str] = []
 
 class KeywordSentiment(BaseModel):
     positive: List[str] = []
@@ -17,7 +18,6 @@ class KeywordSentiment(BaseModel):
 class AnalysisResult(BaseModel):
     index: str
     targeted: bool
-    topic: str
     sentiment: str
     confidence: float
     keywords: KeywordSentiment

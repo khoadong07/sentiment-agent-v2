@@ -13,7 +13,6 @@ from slowapi.middleware import SlowAPIMiddleware
 from app.main import agent
 from app.schemas import PostInput, AnalysisResult
 from app.cache import cache
-from app.db import mongo_conn
 from app.config import MAX_CONCURRENT_REQUESTS, REQUEST_TIMEOUT
 
 # Cấu hình logging
@@ -119,7 +118,6 @@ async def analyze_sentiment(request: Request, post: PostInput, background_tasks:
                 return {
                     "index": input_data.get("index", ""),
                     "targeted": False,
-                    "topic": "Timeout",
                     "sentiment": "neutral",
                     "confidence": 0.0,
                     "keywords": {"positive": [], "negative": [], "neutral": []},
@@ -131,7 +129,6 @@ async def analyze_sentiment(request: Request, post: PostInput, background_tasks:
             return {
                 "index": input_data.get("index", "") if 'input_data' in locals() else "",
                 "targeted": False,
-                "topic": "Error",
                 "sentiment": "neutral",
                 "confidence": 0.0,
                 "keywords": {"positive": [], "negative": [], "neutral": []},
@@ -148,7 +145,6 @@ def process_analysis(input_data: dict) -> dict:
         clean_result = {
             "index": str(result.get("index", "")),
             "targeted": bool(result.get("targeted", False)),
-            "topic": str(result.get("topic", "")),
             "sentiment": str(result.get("sentiment", "neutral")),
             "confidence": float(result.get("confidence", 0.0)),
             "keywords": {
@@ -167,7 +163,6 @@ def process_analysis(input_data: dict) -> dict:
         return {
             "index": input_data.get("index", ""),
             "targeted": False,
-            "topic": "Error",
             "sentiment": "neutral",
             "confidence": 0.0,
             "keywords": {"positive": [], "negative": [], "neutral": []},
@@ -186,13 +181,6 @@ def cache_result(cache_data: dict, result: dict):
 def health_check():
     """Comprehensive health check"""
     try:
-        # Test MongoDB connection
-        db_status = "healthy"
-        try:
-            mongo_conn.client.admin.command('ping')
-        except Exception as e:
-            db_status = "error"
-        
         # Get cache stats safely
         cache_size = 0
         try:
@@ -205,7 +193,6 @@ def health_check():
             "status": "healthy",
             "service": "sentiment-analysis", 
             "version": "2.0.0",
-            "database": db_status,
             "cache": {
                 "size": cache_size,
                 "max_size": 1000
