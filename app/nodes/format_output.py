@@ -15,15 +15,19 @@ def format_output(state):
         sentiment = llm_analysis.get("sentiment", "neutral")
         keywords = llm_analysis.get("keywords", {})
         
-        # Kiểm tra xem có keywords được tìm thấy không
-        has_keywords = any([
-            keywords.get("positive", []),
-            keywords.get("negative", []),
-            keywords.get("neutral", [])
-        ])
+        # Chuyển main_keywords về lowercase để so sánh không phân biệt hoa thường
+        main_keywords_lower = [kw.lower() for kw in main_keywords]
         
-        # Targeted = True nếu có sentiment khác neutral hoặc có keywords
-        targeted = sentiment != "neutral" or has_keywords
+        # Kiểm tra xem có keywords nào trùng với main_keywords không
+        found_keywords = []
+        for category in ["positive", "negative", "neutral"]:
+            category_keywords = keywords.get(category, [])
+            for kw in category_keywords:
+                if kw.lower() in main_keywords_lower:
+                    found_keywords.append(kw)
+        
+        # Targeted = True chỉ khi có keywords trùng với main_keywords
+        targeted = len(found_keywords) > 0
         
         # Tạo kết quả cuối cùng
         result = {
@@ -37,7 +41,7 @@ def format_output(state):
             "explanation": llm_analysis.get("explanation", "")
         }
         
-        logger.info(f"Formatted result: targeted={targeted}, sentiment={sentiment}")
+        logger.info(f"Formatted result: targeted={targeted}, sentiment={sentiment}, found_keywords={found_keywords}")
         
         return {**state, "final_result": result}
         

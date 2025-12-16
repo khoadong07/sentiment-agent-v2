@@ -18,9 +18,10 @@ QUY TẮC PHÂN TÍCH:
    - neutral: đề cập trung tính hoặc không có thái độ rõ ràng
 
 3. TRÍCH XUẤT KEYWORDS:
-   - Chỉ lấy từ/cụm từ tiếng Việt liên quan TRỰC TIẾP đến chủ đề
+   - CHỈ lấy keywords từ danh sách keywords đã cho: {keywords}
+   - Chỉ trả về keywords nào thực sự xuất hiện trong nội dung
    - Phân loại theo sentiment của từng keyword đối với chủ đề
-   - Không lấy từ khóa chung chung không liên quan
+   - KHÔNG tạo ra keywords mới ngoài danh sách đã cho
 
 4. CONFIDENCE:
    - 0.8-1.0: có từ khóa rõ ràng, sentiment chắc chắn
@@ -33,10 +34,12 @@ QUY TẮC PHÂN TÍCH:
    - Tập trung vào mối liên hệ với chủ đề
 
 VÍ DỤ:
-Chủ đề: "máy lọc không khí"
+Chủ đề: "Dyson"
+Keywords: ["dyson", "dsyon", "máy lọc không khí"]
 Text: "máy lọc dyson 30 củ đắt quá nhưng hiệu quả"
 → sentiment: "positive" (hiệu quả tốt dù đắt)
-→ keywords: {{"positive": ["hiệu quả"], "negative": ["đắt"], "neutral": ["dyson", "máy lọc"]}}
+→ keywords: {{"positive": [], "negative": [], "neutral": ["dyson"]}}
+(Chỉ trả về "dyson" vì nó có trong danh sách keywords, không trả về "hiệu quả" hay "đắt")
 
 QUAN TRỌNG: Chỉ trả về JSON thuần túy, không có text thêm trước hoặc sau.
 
@@ -67,8 +70,10 @@ QUY TẮC PHÂN TÍCH:
    - neutral: nội dung trung tính, không có cảm xúc rõ ràng
 
 2. TRÍCH XUẤT KEYWORDS:
-   - Lấy các từ/cụm từ thể hiện cảm xúc trong nội dung
+   - CHỈ lấy các từ/cụm từ thể hiện cảm xúc CHÍNH trong nội dung
+   - Tránh lấy quá nhiều keywords không quan trọng
    - Phân loại theo sentiment của từng keyword
+   - Nếu nội dung quá chung chung, có thể trả về keywords rỗng
 
 3. CONFIDENCE:
    - 0.7-1.0: sentiment rất rõ ràng
