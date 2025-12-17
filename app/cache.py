@@ -17,10 +17,11 @@ class MemoryCache:
     
     def _generate_key(self, data: Dict[str, Any]) -> str:
         """Tạo cache key từ input data"""
-        # Chỉ cache dựa trên index và merged text
+        # Cache dựa trên index, merged text và type
         cache_data = {
             "index": data.get("index", ""),
-            "text": data.get("merged_text", "")
+            "text": data.get("merged_text", ""),
+            "type": data.get("type", "")
         }
         content = json.dumps(cache_data, sort_keys=True, ensure_ascii=False)
         return hashlib.md5(content.encode()).hexdigest()

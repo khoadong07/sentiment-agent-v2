@@ -92,7 +92,11 @@ async def analyze_sentiment(request: Request, post: PostInput, background_tasks:
             merged_text = " ".join(text_parts)
             
             # Check cache first
-            cache_data = {"index": input_data["index"], "merged_text": merged_text}
+            cache_data = {
+                "index": input_data["index"], 
+                "merged_text": merged_text,
+                "type": input_data.get("type", "")
+            }
             cached_result = cache.get(cache_data)
             if cached_result:
                 logger.info(f"Cache hit - Response time: {time.time() - start_time:.3f}s")
