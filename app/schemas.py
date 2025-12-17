@@ -24,3 +24,4 @@ class AnalysisResult(BaseModel):
     confidence: float
     keywords: KeywordSentiment
     explanation: str
+    log_level: int

@@ -123,7 +123,8 @@ async def analyze_sentiment(request: Request, post: PostInput, background_tasks:
                     "sentiment": "neutral",
                     "confidence": 0.0,
                     "keywords": {"positive": [], "negative": [], "neutral": []},
-                    "explanation": "Request timeout"
+                    "explanation": "Request timeout",
+                    "log_level": 0
                 }
                 
         except Exception as e:
@@ -136,7 +137,8 @@ async def analyze_sentiment(request: Request, post: PostInput, background_tasks:
                 "sentiment": "neutral",
                 "confidence": 0.0,
                 "keywords": {"positive": [], "negative": [], "neutral": []},
-                "explanation": f"Internal error: {str(e)}"
+                "explanation": f"Internal error: {str(e)}",
+                "log_level": 0
             }
 
 def process_analysis(input_data: dict) -> dict:
@@ -158,7 +160,8 @@ def process_analysis(input_data: dict) -> dict:
                 "negative": list(result.get("keywords", {}).get("negative", [])),
                 "neutral": list(result.get("keywords", {}).get("neutral", []))
             },
-            "explanation": str(result.get("explanation", ""))
+            "explanation": str(result.get("explanation", "")),
+            "log_level": int(result.get("log_level", 0))
         }
         
         return clean_result
@@ -174,7 +177,8 @@ def process_analysis(input_data: dict) -> dict:
             "sentiment": "neutral",
             "confidence": 0.0,
             "keywords": {"positive": [], "negative": [], "neutral": []},
-            "explanation": f"Lỗi xử lý: {str(e)}"
+            "explanation": f"Lỗi xử lý: {str(e)}",
+            "log_level": 0
         }
 
 def cache_result(cache_data: dict, result: dict):
