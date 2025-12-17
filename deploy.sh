@@ -81,7 +81,7 @@ echo -e "${YELLOW}🔍 Running comprehensive health checks...${NC}"
 # Check individual API instances
 for i in {1..3}; do
     echo -e "${BLUE}Checking sentiment-api-$i...${NC}"
-    if docker-compose -f $COMPOSE_FILE exec -T sentiment-api-$i curl -f http://localhost:8000/health > /dev/null 2>&1; then
+    if docker-compose -f $COMPOSE_FILE exec -T sentiment-api-$i curl -f http://localhost:4880/health > /dev/null 2>&1; then
         echo -e "${GREEN}✅ sentiment-api-$i is healthy${NC}"
     else
         echo -e "${RED}❌ sentiment-api-$i health check failed${NC}"

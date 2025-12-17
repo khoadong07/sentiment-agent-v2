@@ -32,7 +32,7 @@ test_data_no_keywords = {
 def test_api_with_keywords():
     """Test API với content có mention keywords"""
     try:
-        url = "http://localhost:8000/analyze"
+        url = "http://localhost:4880/analyze"
         
         print("=== Testing API với content có mention keywords ===")
         print(f"Data: {json.dumps(test_data_with_keywords, indent=2, ensure_ascii=False)}")
@@ -53,7 +53,7 @@ def test_api_with_keywords():
 def test_api_no_keywords():
     """Test API với content không mention keywords"""
     try:
-        url = "http://localhost:8000/analyze"
+        url = "http://localhost:4880/analyze"
         
         print("\n=== Testing API với content KHÔNG mention keywords ===")
         print(f"Data: {json.dumps(test_data_no_keywords, indent=2, ensure_ascii=False)}")
@@ -75,7 +75,7 @@ def test_api_no_keywords():
 def test_validation():
     """Test validation endpoint"""
     try:
-        url = "http://localhost:8000/test-validation"
+        url = "http://localhost:4880/test-validation"
         
         print("\n=== Testing validation ===")
         response = requests.post(url, json=test_data_with_keywords)

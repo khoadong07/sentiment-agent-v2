@@ -18,7 +18,7 @@ test_data = {
 
 def test_analyze_endpoint():
     """Test endpoint /analyze"""
-    url = "http://localhost:8000/analyze"
+    url = "http://localhost:4880/analyze"
     
     try:
         print("Đang gửi request...")
@@ -64,7 +64,7 @@ def test_analyze_endpoint():
 
 def test_health_endpoint():
     """Test health check endpoint"""
-    url = "http://localhost:8000/health"
+    url = "http://localhost:4880/health"
     
     try:
         response = requests.get(url)

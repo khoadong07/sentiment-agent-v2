@@ -22,7 +22,7 @@ def test_api_response():
     
     try:
         # Test với local server
-        url = "http://localhost:8000/analyze"
+        url = "http://localhost:4880/analyze"
         
         print("Testing API response format...")
         print(f"Request data: {json.dumps(test_data, indent=2, ensure_ascii=False)}")
@@ -58,7 +58,7 @@ def test_api_response():
             print(f"Response: {response.text}")
             
     except requests.exceptions.ConnectionError:
-        print("❌ Cannot connect to API. Make sure the server is running on localhost:8000")
+        print("❌ Cannot connect to API. Make sure the server is running on localhost:4880")
     except Exception as e:
         print(f"❌ Test error: {str(e)}")
 

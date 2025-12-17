@@ -22,7 +22,6 @@ OPENAI_TIMEOUT = int(os.getenv("OPENAI_TIMEOUT", "30"))
 OPENAI_MAX_TOKENS = int(os.getenv("OPENAI_MAX_TOKENS", "500"))
 
 # Cache Configuration
-REDIS_URL = os.getenv("REDIS_URL", "redis://localhost:6379")
 CACHE_TTL = int(os.getenv("CACHE_TTL", "3600"))  # 1 hour
 
 # Performance Settings

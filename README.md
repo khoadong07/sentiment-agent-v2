@@ -42,7 +42,7 @@ OPENAI_API_KEY=your_openai_api_key
 python run_server.py
 ```
 
-Server sẽ chạy tại: http://localhost:8000
+Server sẽ chạy tại: http://localhost:4880
 
 ## API Endpoints
 

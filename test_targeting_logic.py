@@ -77,7 +77,7 @@ def test_targeting_scenarios():
                 print(f"Response: {response.text}")
                 
         except requests.exceptions.ConnectionError:
-            print("❌ Cannot connect to API. Make sure server is running on localhost:8000")
+            print("❌ Cannot connect to API. Make sure server is running on localhost:4880")
             break
         except Exception as e:
             print(f"❌ Test error: {str(e)}")

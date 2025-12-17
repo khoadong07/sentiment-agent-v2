@@ -39,7 +39,7 @@ TEST_SAMPLES = [
 ]
 
 class LoadTester:
-    def __init__(self, base_url="http://localhost:8000"):
+    def __init__(self, base_url="http://localhost:4880"):
         self.base_url = base_url
         self.results = []
         
@@ -185,7 +185,7 @@ class LoadTester:
 
 async def main():
     parser = argparse.ArgumentParser(description="Load test Sentiment Analysis API")
-    parser.add_argument("--url", default="http://localhost:8000", help="API base URL")
+    parser.add_argument("--url", default="http://localhost:4880", help="API base URL")
     parser.add_argument("--users", type=int, default=10, help="Concurrent users")
     parser.add_argument("--requests", type=int, default=10, help="Requests per user")
     
