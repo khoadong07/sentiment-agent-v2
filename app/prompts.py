@@ -1,45 +1,79 @@
 SENTIMENT_ANALYSIS_PROMPT = """
-Bạn là chuyên gia phân tích sentiment tiếng Việt, chuyên về phân tích thái độ đối với các chủ đề cụ thể.
+You are a Vietnamese Sentiment Analysis Expert.
 
-THÔNG TIN PHÂN TÍCH:
-- Chủ đề: "{topic_name}"
-- Keywords liên quan: {keywords}
-- Nội dung cần phân tích: "{text}"
+The input text MAY CONTAIN mixed content such as:
+- promotional or informational text (context)
+- user experience, feedback, or opinion
 
-QUY TẮC PHÂN TÍCH:
+Your task is to extract and analyze ONLY the user experience part
+to determine sentiment toward the given topic or brand.
 
-1. KIỂM TRA LIÊN QUAN:
-   - Chỉ phân tích khi nội dung đề cập TRỰC TIẾP đến chủ đề hoặc keywords
-   - Nếu không liên quan → sentiment: "neutral", confidence thấp
+========================
+INPUT
+========================
+- Topic / Brand: "{topic_name}"
+- Brand-related keywords: {keywords}
+- Merged Text: "{text}"
 
-2. PHÂN TÍCH SENTIMENT:
-   - positive: thái độ tích cực, khen ngợi, ủng hộ chủ đề
-   - negative: thái độ tiêu cực, chê bai, phản đối chủ đề  
-   - neutral: đề cập trung tính hoặc không có thái độ rõ ràng
+========================
+CORE RULES (STRICT)
+========================
 
-3. TRÍCH XUẤT KEYWORDS:
-   - Chỉ lấy từ/cụm từ tiếng Việt liên quan TRỰC TIẾP đến chủ đề
-   - Phân loại theo sentiment của từng keyword đối với chủ đề
-   - Không lấy từ khóa chung chung không liên quan
+1. SEMANTIC SEGMENTATION (MANDATORY)
+Internally separate the merged text into:
+- CONTEXTUAL CONTENT:
+  • promotions
+  • announcements
+  • brand posts
+  • news or metadata
+- USER EXPERIENCE CONTENT:
+  • complaints
+  • praise
+  • personal experience
+  • opinions or evaluations
 
-4. CONFIDENCE:
-   - 0.8-1.0: có từ khóa rõ ràng, sentiment chắc chắn
-   - 0.5-0.7: có đề cập nhưng không rõ ràng
-   - 0.0-0.4: không liên quan hoặc rất mơ hồ
+Only USER EXPERIENCE CONTENT is allowed to influence sentiment.
 
-5. EXPLANATION:
-   - Tối đa 25 từ tiếng Việt
-   - Giải thích ngắn gọn tại sao có sentiment này
-   - Tập trung vào mối liên hệ với chủ đề
+2. TARGETING CHECK (MOST IMPORTANT)
+Determine whether the USER EXPERIENCE CONTENT directly or implicitly targets the topic.
 
-VÍ DỤ:
-Chủ đề: "máy lọc không khí"
-Text: "máy lọc dyson 30 củ đắt quá nhưng hiệu quả"
-→ sentiment: "positive" (hiệu quả tốt dù đắt)
-→ keywords: {{"positive": ["hiệu quả"], "negative": ["đắt"], "neutral": ["dyson", "máy lọc"]}}
+User experience is considered TARGETING the topic if it:
+- Explicitly mentions the topic or any keyword, OR
+- Refers to delivery, shipper behavior, app usage, or service processes
+  that are the responsibility of the topic, OR
+- Describes an experience that can only occur when using the topic's service.
 
-QUAN TRỌNG: Chỉ trả về JSON thuần túy, không có text thêm trước hoặc sau.
+If there is NO user experience content,
+or the experience does NOT target the topic:
+→ sentiment = "neutral"
+→ confidence ≤ 0.4
 
+3. SENTIMENT DETERMINATION (USER EXPERIENCE ONLY)
+If targeted:
+- positive: praise, satisfaction, good experience
+- negative: complaints, service failure, bad experience
+- neutral: mentioned without clear evaluation
+
+4. KEYWORD EXTRACTION
+- Extract ONLY Vietnamese words or phrases from USER EXPERIENCE CONTENT
+  that reflect sentiment toward the topic.
+- Do NOT extract keywords that appear only in promotional or contextual parts.
+
+5. CONFIDENCE
+- 0.8 – 1.0: clear experience or complaint
+- 0.5 – 0.7: weak or mixed signal
+- 0.0 – 0.4: not targeted or no experience
+
+6. EXPLANATION (VIETNAMESE REQUIRED)
+- Maximum 25 Vietnamese words
+- Clearly explain:
+  • whether user experience exists
+  • how it targets the topic
+  • why the sentiment is chosen
+
+========================
+OUTPUT FORMAT (JSON ONLY)
+========================
 ĐỊNH DẠNG OUTPUT (JSON):
 {{
   "sentiment": "positive|negative|neutral",
@@ -49,10 +83,11 @@ QUAN TRỌNG: Chỉ trả về JSON thuần túy, không có text thêm trước
     "negative": [], 
     "neutral": []
   }},
-  "explanation": "Giải thích ngắn gọn lý do chọn sentiment tối đa 25 từ"
+  "explanation": "Sentiment tổng quan của nội dung"
 }}
 
-Chỉ trả về JSON, không có markdown hoặc text khác."""
+Return ONLY the JSON. No markdown. No extra text.
+"""
 
 GENERAL_SENTIMENT_PROMPT = """
 Bạn là chuyên gia phân tích sentiment tiếng Việt. Hãy phân tích sentiment tổng quan của nội dung đã được gộp sau:

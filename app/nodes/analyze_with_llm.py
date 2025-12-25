@@ -61,7 +61,7 @@ def analyze_with_llm(state):
         # Tạo prompt tối ưu
         prompt = SENTIMENT_ANALYSIS_PROMPT.format(
             topic_name=topic_name,
-            keywords=all_keywords[:10],  # Limit keywords để giảm token
+            keywords=all_keywords,  # Limit keywords để giảm token
             text=processed_text[:1000]   # Limit text length
         )
         
