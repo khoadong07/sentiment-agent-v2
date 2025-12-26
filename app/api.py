@@ -148,15 +148,16 @@ async def analyze_sentiment(request: Request, post: PostInput, background_tasks:
 def process_analysis(input_data: dict) -> dict:
     """Synchronous processing function"""
     try:
+        # Chạy agent workflow
         state = agent.invoke({"input_data": input_data})
         result = state.get("final_result", {})
         
-        # Ensure result is completely serializable
+        # Trả về clean result với đầy đủ fields
         clean_result = {
             "id": str(input_data.get("id", "")),
             "index": str(result.get("index", "")),
             "type": str(input_data.get("type", "")),
-            "targeted": bool(result.get("targeted", False)),
+            "targeted": bool(result.get("targeted", False)),  # ✅ KEY FIELD
             "sentiment": str(result.get("sentiment", "neutral")),
             "confidence": float(result.get("confidence", 0.0)),
             "keywords": {
@@ -165,7 +166,7 @@ def process_analysis(input_data: dict) -> dict:
                 "neutral": list(result.get("keywords", {}).get("neutral", []))
             },
             "explanation": str(result.get("explanation", "")),
-            "log_level": int(result.get("log_level", 0))
+            "log_level": int(result.get("log_level", 0))  # ✅ DEPENDS ON targeted
         }
         
         return clean_result
