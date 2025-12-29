@@ -126,7 +126,7 @@ async def analyze_sentiment(request: Request, post: PostInput, background_tasks:
                     "targeted": False,
                     "sentiment": "neutral",
                     "confidence": 0.0,
-                    "keywords": {"positive": [], "negative": [], "neutral": []},
+                    "keywords": {"positive": [], "negative": []},
                     "explanation": "Request timeout",
                     "log_level": 0
                 }
@@ -140,7 +140,7 @@ async def analyze_sentiment(request: Request, post: PostInput, background_tasks:
                 "targeted": False,
                 "sentiment": "neutral",
                 "confidence": 0.0,
-                "keywords": {"positive": [], "negative": [], "neutral": []},
+                "keywords": {"positive": [], "negative": []},
                 "explanation": f"Internal error: {str(e)}",
                 "log_level": 0
             }
@@ -162,8 +162,7 @@ def process_analysis(input_data: dict) -> dict:
             "confidence": float(result.get("confidence", 0.0)),
             "keywords": {
                 "positive": list(result.get("keywords", {}).get("positive", [])),
-                "negative": list(result.get("keywords", {}).get("negative", [])),
-                "neutral": list(result.get("keywords", {}).get("neutral", []))
+                "negative": list(result.get("keywords", {}).get("negative", []))
             },
             "explanation": str(result.get("explanation", "")),
             "log_level": int(result.get("log_level", 0))  # ✅ DEPENDS ON targeted
@@ -181,7 +180,7 @@ def process_analysis(input_data: dict) -> dict:
             "targeted": False,
             "sentiment": "neutral",
             "confidence": 0.0,
-            "keywords": {"positive": [], "negative": [], "neutral": []},
+            "keywords": {"positive": [], "negative": []},
             "explanation": f"Lỗi xử lý: {str(e)}",
             "log_level": 0
         }

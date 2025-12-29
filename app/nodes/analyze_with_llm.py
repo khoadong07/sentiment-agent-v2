@@ -25,6 +25,7 @@ def analyze_with_llm(state):
         input_data = state["input_data"]
         merged_text = state["merged_text"]
         main_keywords = input_data.get("main_keywords", [])
+        post_type = input_data.get("type", "")
         
         # Nếu không có main_keywords, trả về targeted = False
         if not main_keywords:
@@ -32,16 +33,17 @@ def analyze_with_llm(state):
             return {**state, "llm_analysis": {
                 "sentiment": "neutral",
                 "targeted": False,
-                "keywords": {"positive": [], "negative": [], "neutral": []},
+                "keywords": {"positive": [], "negative": []},
                 "confidence": 0.0,
                 "explanation": "Không có main_keywords để kiểm tra",
                 "index": input_data.get("index", "")
             }}
         
-        # Tạo prompt với main_keywords
+        # Tạo prompt với main_keywords và post_type
         prompt = TARGETED_ANALYSIS_PROMPT.format(
             main_keywords=", ".join(main_keywords),
-            text=merged_text
+            text=merged_text,
+            post_type=post_type
         )
         
         # Gọi LLM
@@ -52,7 +54,7 @@ def analyze_with_llm(state):
         # Đảm bảo có đầy đủ fields
         analysis_result["index"] = input_data.get("index", "")
         
-        logger.info(f"LLM analysis completed - targeted: {analysis_result.get('targeted', False)}")
+        logger.info(f"LLM analysis completed - targeted: {analysis_result.get('targeted', False)}, type: {post_type}")
         
         return {**state, "llm_analysis": analysis_result}
         
@@ -61,7 +63,7 @@ def analyze_with_llm(state):
         return {**state, "llm_analysis": {
             "sentiment": "neutral",
             "targeted": False,
-            "keywords": {"positive": [], "negative": [], "neutral": []},
+            "keywords": {"positive": [], "negative": []},
             "confidence": 0.0,
             "explanation": f"Lỗi phân tích: {str(e)}",
             "index": input_data.get("index", "")
@@ -98,10 +100,10 @@ def parse_llm_response(response_text: str) -> dict:
                 # Nếu keywords là list, chuyển thành dict format
                 keywords = {"positive": [], "negative": [], "neutral": keywords}
             elif not isinstance(keywords, dict):
-                keywords = {"positive": [], "negative": [], "neutral": []}
+                keywords = {"positive": [], "negative": []}
             
-            # Đảm bảo có đầy đủ keys trong keywords
-            for key in ["positive", "negative", "neutral"]:
+            # Đảm bảo có đầy đủ keys trong keywords (bỏ neutral để tiết kiệm token)
+            for key in ["positive", "negative"]:
                 if key not in keywords:
                     keywords[key] = []
             
@@ -117,7 +119,7 @@ def parse_llm_response(response_text: str) -> dict:
         return {
             "sentiment": "neutral",
             "targeted": False,
-            "keywords": {"positive": [], "negative": [], "neutral": []},
+            "keywords": {"positive": [], "negative": []},
             "confidence": 0.0,
             "explanation": "Không thể parse response từ LLM"
         }
@@ -127,7 +129,7 @@ def parse_llm_response(response_text: str) -> dict:
         return {
             "sentiment": "neutral",
             "targeted": False,
-            "keywords": {"positive": [], "negative": [], "neutral": []},
+            "keywords": {"positive": [], "negative": []},
             "confidence": 0.0,
             "explanation": f"Lỗi parse: {str(e)}"
         }

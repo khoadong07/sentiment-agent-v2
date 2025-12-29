@@ -12,7 +12,6 @@ class PostInput(BaseModel):
 
 class KeywordSentiment(BaseModel):
     positive: List[str] = []
-    neutral: List[str] = []
     negative: List[str] = []
 
 class AnalysisResult(BaseModel):

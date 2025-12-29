@@ -1,67 +1,86 @@
 TARGETED_ANALYSIS_PROMPT = """
-Bạn là chuyên gia phân tích nội dung tiếng Việt. Hãy phân tích văn bản sau và xác định:
+You are a Vietnamese content analysis expert. Analyze the following text and determine:
 
-1. TARGETED: Văn bản có đề cập/nhắc đến các main_keywords không?
-2. SENTIMENT: Cảm xúc tổng thể của văn bản
-3. KEYWORDS: Các từ khóa cảm xúc được tìm thấy
-4. CONFIDENCE: Độ tin cậy của phân tích
+1. TARGETED: Does the text mention/refer to any main_keywords?
+2. SENTIMENT: Overall emotion of the text (ONLY for user experience content)
+3. KEYWORDS: Emotional keywords found (exclude neutral to save tokens)
+4. CONFIDENCE: Analysis confidence level
 
-MAIN KEYWORDS CẦN KIỂM TRA: {main_keywords}
+MAIN KEYWORDS TO CHECK: {main_keywords}
+POST TYPE: {post_type}
 
-VĂN BẢN CẦN PHÂN TÍCH:
+TEXT TO ANALYZE:
 "{text}"
 
-QUY TẮC PHÂN TÍCH:
+ANALYSIS PRIORITY RULES:
+- If post_type="comment": Focus primarily on CONTENT (comment text) for sentiment analysis, use title/context only for additional context
+- If post_type≠"comment": Analyze all text parts equally (title, content, description)
+
+CRITICAL CONTENT TYPE RULES:
+1. ONLY analyze sentiment for USER EXPERIENCE content (complaints, praise, reviews, personal opinions about using the service/product)
+2. DEFAULT to neutral for: recruitment posts, job ads, promotions, announcements, news, general information, trend posts, classified ads, selling posts
+3. If content is NOT user experience → sentiment="neutral", confidence ≤ 0.4
+
+ANALYSIS RULES:
 
 1. TARGETED (true/false):
-   - true: Văn bản có đề cập/nhắc đến ít nhất 1 trong các main_keywords
-   - false: Văn bản không đề cập đến bất kỳ main_keywords nào
-   - Kiểm tra cả từ chính xác và các biến thể gần giống
+   - true: Text mentions at least 1 main_keyword
+   - false: Text doesn't mention any main_keywords
+   - Check exact words and similar variations
 
 2. SENTIMENT (positive/negative/neutral):
-   - positive: Cảm xúc tích cực, hài lòng, khen ngợi
-   - negative: Cảm xúc tiêu cực, không hài lòng, phản đối
-   - neutral: Trung tính hoặc không rõ cảm xúc
+   - First determine: Is this USER EXPERIENCE content?
+   - If NOT user experience → sentiment="neutral"
+   - If user experience:
+     * positive: Positive emotions, satisfaction, praise about using the service
+     * negative: Negative emotions, dissatisfaction, complaints about using the service
+     * neutral: Neutral or unclear emotions
 
 3. KEYWORDS:
-   - Trích xuất các từ/cụm từ thể hiện cảm xúc từ văn bản
-   - Phân loại theo sentiment: positive, negative, neutral
+   - Extract emotional words/phrases ONLY from user experience content
+   - Classify by sentiment: positive, negative
+   - SKIP neutral keywords to save tokens
+   - For comment types: Focus on comment content sentiment
 
 4. CONFIDENCE (0.0-1.0):
-   - 0.8-1.0: Rất rõ ràng
-   - 0.5-0.7: Khá rõ ràng  
-   - 0.0-0.4: Không rõ ràng
+   - 0.8-1.0: Very clear user experience with clear sentiment
+   - 0.5-0.7: Fairly clear user experience
+   - 0.0-0.4: Not user experience OR unclear sentiment
 
 5. EXPLANATION:
-   - Giải thích ngắn gọn bằng tiếng Việt (tối đa 20 từ)
-   - Nêu rõ có đề cập main_keywords hay không
+   - Brief explanation in Vietnamese (max 20 words)
+   - State clearly if main_keywords are mentioned AND if this is user experience
 
-QUAN TRỌNG: Chỉ trả về JSON thuần túy, không có text thêm.
+IMPORTANT: Return only pure JSON, no additional text.
 
-FORMAT OUTPUT (JSON):
+OUTPUT FORMAT (JSON):
 {{
   "targeted": true|false,
   "sentiment": "positive|negative|neutral",
   "confidence": 0.0,
   "keywords": {{
     "positive": [],
-    "negative": [],
-    "neutral": []
+    "negative": []
   }},
-  "explanation": "Giải thích ngắn gọn"
+  "explanation": "Giải thích ngắn gọn bằng tiếng Việt"
 }}
 """
 
 SENTIMENT_ANALYSIS_PROMPT = """
-Analyze Vietnamese text and return sentiment JSON only.
+Analyze Vietnamese text and return sentiment JSON with 100% Vietnamese output.
 
 INPUT
 Topic: "{topic_name}"
 Keywords: {keywords}
 Text: "{text}"
+Type: "{post_type}"
+
+ANALYSIS PRIORITY RULES:
+- If type="comment": Focus primarily on CONTENT (comment text) for sentiment analysis, use title/context only for additional context
+- If type≠"comment": Analyze all text parts equally (title, content, description)
 
 RULES
-1. Use ONLY user experience content (complaints, praise, opinions). Ignore ads, promotions, news, announcements.
+1. Use ONLY user experience content (complaints, praise, opinions). DEFAULT to neutral for ads, promotions, news, announcements, trends, classified ads.
 2. If no user experience → sentiment="neutral", confidence ≤ 0.4
 3. User experience TARGETS topic if:
    - topic or keywords mentioned, OR
@@ -70,71 +89,29 @@ RULES
 5. If targeted:
    - positive = praise / satisfaction
    - negative = complaint / bad experience
-   - neutral = no clear evaluation
+   - neutral = no clear evaluation OR non-user-experience content
 6. Extract ONLY Vietnamese sentiment keywords from user experience.
-7. Confidence:
+7. SKIP neutral keywords to save output tokens.
+8. For comment types: Base sentiment primarily on comment content, not title/context
+9. Confidence:
    - 0.8–1.0 clear
    - 0.5–0.7 weak/mixed
-   - ≤0.4 not targeted
-8. Explanation:
-   - Vietnamese only
-   - Max 15 words
-   - Clearly state: existence of user experience, targeting, reason for sentiment
+   - ≤0.4 not targeted OR not user experience
+10. Explanation:
+    - Vietnamese only (100% Vietnamese output)
+    - Max 15 words
+    - Clearly state: existence of user experience, targeting, reason for sentiment
 
-OUTPUT JSON ONLY
+OUTPUT JSON ONLY (all text fields in Vietnamese)
 {{
   "sentiment": "positive|negative|neutral",
   "confidence": 0.0,
   "keywords": {{
     "positive": [],
-    "negative": [],
-    "neutral": []
+    "negative": []
   }},
-  "explanation": ""
+  "explanation": "Giải thích bằng tiếng Việt"
 }}
 
 Return ONLY valid JSON, no extra text, no markdown.
 """
-
-GENERAL_SENTIMENT_PROMPT = """
-Bạn là chuyên gia phân tích sentiment tiếng Việt. Hãy phân tích sentiment tổng quan của nội dung đã được gộp sau:
-
-NỘI DUNG GỘP (title + content + description): "{text}"
-
-QUY TẮC PHÂN TÍCH:
-
-1. PHÂN TÍCH SENTIMENT TỔNG QUAN:
-   - positive: nội dung tích cực, vui vẻ, hài lòng
-   - negative: nội dung tiêu cực, buồn bã, không hài lòng
-   - neutral: nội dung trung tính, không có cảm xúc rõ ràng
-
-2. TRÍCH XUẤT KEYWORDS:
-   - CHỈ lấy các từ/cụm từ thể hiện cảm xúc CHÍNH trong toàn bộ văn bản gộp
-   - Tránh lấy quá nhiều keywords không quan trọng
-   - Phân loại từng keyword vào sentiment tương ứng:
-     * positive: từ/cụm từ thể hiện cảm xúc tích cực
-     * negative: từ/cụm từ thể hiện cảm xúc tiêu cực  
-     * neutral: từ/cụm từ trung tính hoặc không rõ cảm xúc
-
-3. CONFIDENCE:
-   - 0.7-1.0: sentiment rất rõ ràng
-   - 0.4-0.6: sentiment khá rõ ràng
-   - 0.0-0.3: sentiment không rõ ràng hoặc trung tính
-
-4. EXPLANATION:
-   - Tối đa 20 từ tiếng Việt
-   - Giải thích sentiment tổng quan
-
-QUAN TRỌNG: Chỉ trả về JSON thuần túy, không có text thêm.
-
-ĐỊNH DẠNG OUTPUT (JSON):
-{{
-  "sentiment": "positive|negative|neutral",
-  "confidence": 0.0,
-  "keywords": {{
-    "positive": [],
-    "negative": [], 
-    "neutral": []
-  }},
-  "explanation": "Sentiment tổng quan của nội dung"
-}}"""
