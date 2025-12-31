@@ -2,101 +2,113 @@ import json
 import hashlib
 import logging
 from typing import Optional, Dict, Any
-from app.config import CACHE_TTL
+import redis
+from app.config import REDIS_URL, CACHE_TTL
 
 logger = logging.getLogger(__name__)
 
-class MemoryCache:
-    """
-    In-memory cache đơn giản cho production nhỏ
-    Có thể thay thế bằng Redis cho scale lớn hơn
-    """
-    def __init__(self):
-        self._cache: Dict[str, Dict] = {}
-        self._max_size = 1000  # Giới hạn số lượng items
+class CacheService:
+    """Production Redis cache service với fallback to memory"""
     
-    def _generate_key(self, data: Dict[str, Any]) -> str:
-        """Tạo cache key từ input data"""
-        # Cache dựa trên index, merged text và type
+    def __init__(self):
+        try:
+            self.redis_client = redis.from_url(REDIS_URL, decode_responses=True)
+            # Test connection
+            self.redis_client.ping()
+            logger.info("Redis connection established")
+        except Exception as e:
+            logger.warning(f"Redis connection failed: {e}. Using in-memory cache.")
+            self.redis_client = None
+            self._memory_cache = {}
+    
+    def _generate_cache_key(self, data: Dict[str, Any]) -> str:
+        """Generate consistent cache key from request data"""
+        # Create a consistent string representation
         cache_data = {
             "index": data.get("index", ""),
-            "text": data.get("merged_text", ""),
-            "type": data.get("type", "")
+            "merged_text": data.get("merged_text", ""),
+            "type": data.get("type", ""),
+            "main_keywords": sorted(data.get("main_keywords", []))
         }
-        content = json.dumps(cache_data, sort_keys=True, ensure_ascii=False)
-        return hashlib.md5(content.encode()).hexdigest()
+        
+        cache_string = json.dumps(cache_data, sort_keys=True)
+        return f"sentiment:{hashlib.md5(cache_string.encode()).hexdigest()}"
     
-    def get(self, data: Dict[str, Any]) -> Optional[Dict]:
-        """Lấy kết quả từ cache"""
+    def get(self, request_data: Dict[str, Any]) -> Optional[Dict[str, Any]]:
+        """Get cached result"""
         try:
-            key = self._generate_key(data)
-            cached_item = self._cache.get(key)
+            cache_key = self._generate_cache_key(request_data)
             
-            if cached_item:
-                import time
-                if time.time() - cached_item["timestamp"] < CACHE_TTL:
-                    logger.info(f"Cache hit for key: {key[:8]}...")
-                    return cached_item["data"]
-                else:
-                    # Expired, remove from cache
-                    del self._cache[key]
-                    logger.info(f"Cache expired for key: {key[:8]}...")
-            
-            return None
-            
+            if self.redis_client:
+                cached = self.redis_client.get(cache_key)
+                if cached:
+                    return json.loads(cached)
+            else:
+                # Fallback to memory cache
+                return self._memory_cache.get(cache_key)
+                
         except Exception as e:
-            logger.error(f"Cache get error: {str(e)}")
-            return None
+            logger.error(f"Cache get error: {e}")
+        
+        return None
     
-    def set(self, data: Dict[str, Any], result: Dict) -> None:
-        """Lưu kết quả vào cache"""
+    def set(self, request_data: Dict[str, Any], result: Dict[str, Any]) -> None:
+        """Cache result"""
         try:
-            key = self._generate_key(data)
+            cache_key = self._generate_cache_key(request_data)
             
-            # Cleanup old entries if cache is full
-            if len(self._cache) >= self._max_size:
-                self._cleanup_old_entries()
-            
-            import time
-            self._cache[key] = {
-                "data": result,
-                "timestamp": time.time()
-            }
-            
-            logger.info(f"Cache set for key: {key[:8]}...")
-            
+            if self.redis_client:
+                self.redis_client.setex(
+                    cache_key, 
+                    CACHE_TTL, 
+                    json.dumps(result)
+                )
+            else:
+                # Fallback to memory cache with simple cleanup
+                self._memory_cache[cache_key] = result
+                if len(self._memory_cache) > 1000:  # Simple cleanup
+                    # Remove oldest 100 items
+                    keys_to_remove = list(self._memory_cache.keys())[:100]
+                    for key in keys_to_remove:
+                        del self._memory_cache[key]
+                        
         except Exception as e:
-            logger.error(f"Cache set error: {str(e)}")
+            logger.error(f"Cache set error: {e}")
     
-    def _cleanup_old_entries(self):
-        """Xóa 20% entries cũ nhất"""
-        import time
-        current_time = time.time()
-        
-        # Sort by timestamp and remove oldest 20%
-        sorted_items = sorted(
-            self._cache.items(), 
-            key=lambda x: x[1]["timestamp"]
-        )
-        
-        remove_count = len(sorted_items) // 5  # 20%
-        for i in range(remove_count):
-            key = sorted_items[i][0]
-            del self._cache[key]
-        
-        logger.info(f"Cleaned up {remove_count} old cache entries")
+    def stats(self) -> Dict[str, Any]:
+        """Get cache statistics"""
+        try:
+            if self.redis_client:
+                info = self.redis_client.info()
+                return {
+                    "type": "redis",
+                    "connected_clients": info.get("connected_clients", 0),
+                    "used_memory": info.get("used_memory_human", "0B"),
+                    "keyspace_hits": info.get("keyspace_hits", 0),
+                    "keyspace_misses": info.get("keyspace_misses", 0)
+                }
+            else:
+                return {
+                    "type": "memory",
+                    "size": len(self._memory_cache),
+                    "max_size": 1000
+                }
+        except Exception as e:
+            logger.error(f"Cache stats error: {e}")
+            return {"type": "error", "message": str(e)}
     
-    def clear(self):
-        """Xóa toàn bộ cache"""
-        self._cache.clear()
-        logger.info("Cache cleared")
-    
-    def stats(self) -> Dict:
-        """Thống kê cache"""
-        return {
-            "size": len(self._cache),
-            "max_size": self._max_size
-        }
+    def clear(self) -> None:
+        """Clear cache"""
+        try:
+            if self.redis_client:
+                # Clear only sentiment analysis keys
+                keys = self.redis_client.keys("sentiment:*")
+                if keys:
+                    self.redis_client.delete(*keys)
+            else:
+                self._memory_cache.clear()
+        except Exception as e:
+            logger.error(f"Cache clear error: {e}")
 
 # Global cache instance
-cache = MemoryCache()
+cache = CacheService()

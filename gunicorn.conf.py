@@ -14,7 +14,7 @@ max_requests = 2000
 max_requests_jitter = 100
 
 # Timeouts - tối ưu cho production
-timeout = 45
+timeout = 60
 keepalive = 10
 graceful_timeout = 45
 
@@ -42,6 +42,10 @@ tmp_upload_dir = None
 preload_app = True
 enable_stdio_inheritance = True
 
+# Lifecycle hooks
+def on_starting(server):
+    server.log.info("Starting Sentiment Analysis API server...")
+
 def when_ready(server):
     server.log.info("Sentiment Analysis API ready to serve requests")
 
@@ -53,3 +57,9 @@ def pre_fork(server, worker):
 
 def post_fork(server, worker):
     server.log.info("Worker spawned (pid: %s)", worker.pid)
+
+def post_worker_init(worker):
+    worker.log.info("Worker initialized (pid: %s)", worker.pid)
+
+def worker_abort(worker):
+    worker.log.info("Worker received SIGABRT signal")

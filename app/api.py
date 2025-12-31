@@ -1,6 +1,7 @@
 import asyncio
 import logging
 import time
+import uuid
 from contextlib import asynccontextmanager
 from fastapi import FastAPI, HTTPException, BackgroundTasks, Request
 from fastapi.middleware.cors import CORSMiddleware
@@ -9,14 +10,26 @@ from slowapi import Limiter, _rate_limit_exceeded_handler
 from slowapi.util import get_remote_address
 from slowapi.errors import RateLimitExceeded
 from slowapi.middleware import SlowAPIMiddleware
+from prometheus_client import Counter, Histogram, generate_latest, CONTENT_TYPE_LATEST
+from fastapi.responses import Response
 
-from app.main import agent
-from app.schemas import PostInput, AnalysisResult
+from app.services.sentiment_service import sentiment_service
+from app.schemas import SentimentRequest, SentimentResponse, PostInput, AnalysisResult
 from app.cache import cache
-from app.config import MAX_CONCURRENT_REQUESTS, REQUEST_TIMEOUT
+from app.config import MAX_CONCURRENT_REQUESTS, REQUEST_TIMEOUT, RATE_LIMIT, ENVIRONMENT
 
 # Cấu hình logging
+logging.basicConfig(
+    level=logging.INFO,
+    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
+)
 logger = logging.getLogger(__name__)
+
+# Prometheus metrics
+REQUEST_COUNT = Counter('sentiment_requests_total', 'Total sentiment analysis requests', ['method', 'endpoint', 'status'])
+REQUEST_DURATION = Histogram('sentiment_request_duration_seconds', 'Request duration in seconds')
+CACHE_HITS = Counter('sentiment_cache_hits_total', 'Total cache hits')
+CACHE_MISSES = Counter('sentiment_cache_misses_total', 'Total cache misses')
 
 # Rate limiter
 limiter = Limiter(key_func=get_remote_address)
@@ -28,9 +41,11 @@ request_semaphore = asyncio.Semaphore(MAX_CONCURRENT_REQUESTS)
 async def lifespan(app: FastAPI):
     """Lifecycle management cho FastAPI"""
     # Startup
-    logger.info("Starting Sentiment Analysis API...")
+    logger.info("Starting Sentiment Analysis API v2.0...")
+    logger.info(f"Environment: {ENVIRONMENT}")
     logger.info(f"Max concurrent requests: {MAX_CONCURRENT_REQUESTS}")
     logger.info(f"Request timeout: {REQUEST_TIMEOUT}s")
+    logger.info(f"Rate limit: {RATE_LIMIT}")
     
     yield
     
@@ -41,9 +56,11 @@ async def lifespan(app: FastAPI):
 # Tạo FastAPI app với lifecycle
 app = FastAPI(
     title="Sentiment Analysis API",
-    description="High-performance API phân tích sentiment và keyword matching",
+    description="High-performance API phân tích sentiment và keyword matching với Langfuse tracing",
     version="2.0.0",
-    lifespan=lifespan
+    lifespan=lifespan,
+    docs_url="/docs" if ENVIRONMENT != "production" else None,
+    redoc_url="/redoc" if ENVIRONMENT != "production" else None
 )
 
 # Middleware stack (thứ tự quan trọng)
@@ -68,128 +85,133 @@ def root():
     return {
         "message": "Sentiment Analysis API v2.0",
         "status": "running",
+        "environment": ENVIRONMENT,
         "cache_stats": cache.stats()
     }
 
-@app.post("/analyze")
-@limiter.limit("100/minute")  # Rate limiting
-async def analyze_sentiment(request: Request, post: PostInput, background_tasks: BackgroundTasks):
+@app.post("/analyze", response_model=SentimentResponse)
+@limiter.limit(RATE_LIMIT)
+async def analyze_sentiment(request: Request, sentiment_request: SentimentRequest, background_tasks: BackgroundTasks):
     """
-    High-performance sentiment analysis với caching và concurrency control
+    High-performance sentiment analysis với caching, concurrency control và Langfuse tracing
     """
+    start_time = time.time()
+    
     async with request_semaphore:  # Limit concurrent requests
-        start_time = time.time()
-        
         try:
-            logger.info(f"Processing request for post ID: {post.id}")
-            
-            # Prepare data for caching - tạo merged_text để cache
-            input_data = post.model_dump()  # Use model_dump instead of dict()
-            title = (input_data.get("title") or "").strip()
-            content = (input_data.get("content") or "").strip()
-            description = (input_data.get("description") or "").strip()
-            text_parts = [part for part in [title, content, description] if part]
-            merged_text = " ".join(text_parts)
-            
-            # Check cache first
-            cache_data = {
-                "index": input_data["index"], 
-                "merged_text": merged_text,
-                "type": input_data.get("type", "")
-            }
-            cached_result = cache.get(cache_data)
-            if cached_result:
-                logger.info(f"Cache hit - Response time: {time.time() - start_time:.3f}s")
-                return cached_result
-            
-            # Process with timeout
-            try:
-                result = await asyncio.wait_for(
-                    asyncio.to_thread(process_analysis, input_data),
-                    timeout=REQUEST_TIMEOUT
-                )
+            with REQUEST_DURATION.time():
+                logger.info(f"Processing request for ID: {sentiment_request.id}")
                 
-                # Cache the result in background
-                background_tasks.add_task(cache_result, cache_data, result)
+                # Prepare cache data
+                if sentiment_request.type in {"fbPageComment", "fbGroupComment", "fbUserComment", "forumComment",
+                                            "newsComment", "youtubeComment", "tiktokComment", "snsComment",
+                                            "linkedinComment", "ecommerceComment", "threadsComment"}:
+                    merged_text = sentiment_request.content or ""
+                else:
+                    text_parts = [
+                        part for part in [
+                            sentiment_request.title or "",
+                            sentiment_request.content or "",
+                            sentiment_request.description or ""
+                        ] if part.strip()
+                    ]
+                    merged_text = " ".join(text_parts)
                 
-                processing_time = time.time() - start_time
-                logger.info(f"Analysis completed - Response time: {processing_time:.3f}s")
-                
-                return result
-                
-            except asyncio.TimeoutError:
-                logger.error(f"Request timeout after {REQUEST_TIMEOUT}s")
-                return {
-                    "id": input_data.get("id", ""),
-                    "index": input_data.get("index", ""),
-                    "type": input_data.get("type", ""),
-                    "targeted": False,
-                    "sentiment": "neutral",
-                    "confidence": 0.0,
-                    "keywords": {"positive": [], "negative": []},
-                    "explanation": "Request timeout",
-                    "log_level": 0
+                cache_data = {
+                    "index": sentiment_request.index or "",
+                    "merged_text": merged_text,
+                    "type": sentiment_request.type,
+                    "main_keywords": sentiment_request.main_keywords
                 }
                 
+                # Check cache first
+                cached_result = cache.get(cache_data)
+                if cached_result:
+                    CACHE_HITS.inc()
+                    REQUEST_COUNT.labels(method="POST", endpoint="/analyze", status="200").inc()
+                    logger.info(f"Cache hit - Response time: {time.time() - start_time:.3f}s")
+                    return SentimentResponse(**cached_result)
+                
+                CACHE_MISSES.inc()
+                
+                # Process with timeout
+                try:
+                    result = await asyncio.wait_for(
+                        asyncio.to_thread(sentiment_service.analyze, sentiment_request),
+                        timeout=REQUEST_TIMEOUT
+                    )
+                    
+                    # Cache the result in background
+                    background_tasks.add_task(cache_result, cache_data, result.dict())
+                    
+                    processing_time = time.time() - start_time
+                    REQUEST_COUNT.labels(method="POST", endpoint="/analyze", status="200").inc()
+                    logger.info(f"Analysis completed - Response time: {processing_time:.3f}s")
+                    
+                    return result
+                    
+                except asyncio.TimeoutError:
+                    REQUEST_COUNT.labels(method="POST", endpoint="/analyze", status="408").inc()
+                    logger.error(f"Request timeout after {REQUEST_TIMEOUT}s")
+                    return SentimentResponse(
+                        targeted=False,
+                        sentiment="neutral",
+                        confidence=0.0,
+                        keywords={"positive": [], "negative": []},
+                        explanation="Request timeout"
+                    )
+                    
         except Exception as e:
+            REQUEST_COUNT.labels(method="POST", endpoint="/analyze", status="500").inc()
             logger.error(f"Internal error: {str(e)}")
-            return {
-                "id": input_data.get("id", "") if 'input_data' in locals() else "",
-                "index": input_data.get("index", "") if 'input_data' in locals() else "",
-                "type": input_data.get("type", "") if 'input_data' in locals() else "",
-                "targeted": False,
-                "sentiment": "neutral",
-                "confidence": 0.0,
-                "keywords": {"positive": [], "negative": []},
-                "explanation": f"Internal error: {str(e)}",
-                "log_level": 0
-            }
+            return SentimentResponse(
+                targeted=False,
+                sentiment="neutral",
+                confidence=0.0,
+                keywords={"positive": [], "negative": []},
+                explanation=f"Internal error: {str(e)}"
+            )
 
-def process_analysis(input_data: dict) -> dict:
-    """Synchronous processing function"""
-    try:
-        # Chạy agent workflow
-        state = agent.invoke({"input_data": input_data})
-        result = state.get("final_result", {})
-        
-        # Trả về clean result với đầy đủ fields
-        clean_result = {
-            "id": str(input_data.get("id", "")),
-            "index": str(result.get("index", "")),
-            "type": str(input_data.get("type", "")),
-            "targeted": bool(result.get("targeted", False)),  # ✅ KEY FIELD
-            "sentiment": str(result.get("sentiment", "neutral")),
-            "confidence": float(result.get("confidence", 0.0)),
-            "keywords": {
-                "positive": list(result.get("keywords", {}).get("positive", [])),
-                "negative": list(result.get("keywords", {}).get("negative", []))
-            },
-            "explanation": str(result.get("explanation", "")),
-            "log_level": int(result.get("log_level", 0))  # ✅ DEPENDS ON targeted
-        }
-        
-        return clean_result
-            
-    except Exception as e:
-        logger.error(f"Process analysis error: {str(e)}")
-        # Return a clean error response instead of raising
-        return {
-            "id": input_data.get("id", ""),
-            "index": input_data.get("index", ""),
-            "type": input_data.get("type", ""),
-            "targeted": False,
-            "sentiment": "neutral",
-            "confidence": 0.0,
-            "keywords": {"positive": [], "negative": []},
-            "explanation": f"Lỗi xử lý: {str(e)}",
-            "log_level": 0
-        }
+@app.post("/analyze/legacy", response_model=AnalysisResult)
+@limiter.limit(RATE_LIMIT)
+async def analyze_sentiment_legacy(request: Request, post: PostInput, background_tasks: BackgroundTasks):
+    """
+    Legacy endpoint để backward compatibility với format cũ
+    """
+    # Convert PostInput to SentimentRequest
+    sentiment_request = SentimentRequest(
+        id=post.id,
+        index=post.index,
+        title=post.title,
+        content=post.content,
+        description=post.description,
+        type=post.type or "",
+        main_keywords=post.main_keywords
+    )
+    
+    # Call main analyze function
+    result = await analyze_sentiment(request, sentiment_request, background_tasks)
+    
+    # Convert to legacy format
+    return AnalysisResult(
+        id=sentiment_request.id,
+        index=sentiment_request.index or "",
+        type=sentiment_request.type,
+        targeted=result.targeted,
+        sentiment=result.sentiment,
+        confidence=result.confidence,
+        keywords={
+            "positive": result.keywords.get("positive", []),
+            "negative": result.keywords.get("negative", [])
+        },
+        explanation=result.explanation,
+        log_level=1 if result.targeted else 0
+    )
 
 def cache_result(cache_data: dict, result: dict):
     """Background task để cache kết quả"""
     try:
         cache.set(cache_data, result)
-        
     except Exception as e:
         logger.error(f"Cache error: {str(e)}")
 
@@ -197,23 +219,21 @@ def cache_result(cache_data: dict, result: dict):
 def health_check():
     """Comprehensive health check"""
     try:
-        # Get cache stats safely
-        cache_size = 0
-        try:
-            cache_info = cache.stats()
-            cache_size = int(cache_info.get("size", 0))
-        except Exception:
-            pass
+        cache_stats = cache.stats()
         
         return {
             "status": "healthy",
             "service": "sentiment-analysis", 
             "version": "2.0.0",
-            "cache": {
-                "size": cache_size,
-                "max_size": 1000
-            },
-            "concurrent_limit": int(MAX_CONCURRENT_REQUESTS)
+            "environment": ENVIRONMENT,
+            "cache": cache_stats,
+            "concurrent_limit": MAX_CONCURRENT_REQUESTS,
+            "features": {
+                "langfuse_tracing": True,
+                "redis_cache": cache_stats.get("type") == "redis",
+                "rate_limiting": True,
+                "prometheus_metrics": True
+            }
         }
         
     except Exception as e:
@@ -225,53 +245,36 @@ def health_check():
             "error": "Health check failed"
         }
 
+@app.get("/metrics")
+def metrics():
+    """Prometheus metrics endpoint"""
+    return Response(generate_latest(), media_type=CONTENT_TYPE_LATEST)
 
+@app.get("/cache/stats")
+def cache_stats():
+    """Cache statistics endpoint"""
+    return cache.stats()
 
-@app.post("/test-validation")
-def test_validation(data: dict):
-    """Debug endpoint để test validation"""
-    try:
-        post = PostInput(**data)
-        return {
-            "status": "valid",
-            "parsed_data": post.dict()
-        }
-    except Exception as e:
-        return {
-            "status": "invalid", 
-            "error": str(e),
-            "received_data": data
-        }
+@app.post("/cache/clear")
+def clear_cache():
+    """Clear cache endpoint (admin only)"""
+    cache.clear()
+    return {"message": "Cache cleared successfully"}
 
-@app.post("/debug-llm")
-def debug_llm_response(data: dict):
-    """Debug endpoint để test LLM response trực tiếp"""
-    try:
-        from app.llm import llm
-        from app.prompts import SENTIMENT_ANALYSIS_PROMPT
-        
-        # Simple test prompt
-        test_prompt = SENTIMENT_ANALYSIS_PROMPT.format(
-            topic_name="Dyson",
-            keywords=["dyson", "máy lọc không khí"],
-            text=data.get("text", "Test text")
-        )
-        
-        response = llm.invoke(test_prompt)
-        raw_content = response.content
-        
-        # Try to parse
-        from app.nodes.analyze_with_llm import parse_llm_response
-        parsed_result = parse_llm_response(raw_content)
-        
-        return {
-            "raw_response": raw_content,
-            "parsed_result": parsed_result,
-            "status": "success"
-        }
-        
-    except Exception as e:
-        return {
-            "error": str(e),
-            "status": "failed"
-        }
+# Debug endpoints (chỉ trong development)
+if ENVIRONMENT != "production":
+    @app.post("/debug/validate")
+    def debug_validate(data: dict):
+        """Debug endpoint để test validation"""
+        try:
+            request = SentimentRequest(**data)
+            return {
+                "status": "valid",
+                "parsed_data": request.dict()
+            }
+        except Exception as e:
+            return {
+                "status": "invalid", 
+                "error": str(e),
+                "received_data": data
+            }

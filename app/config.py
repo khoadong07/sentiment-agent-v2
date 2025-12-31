@@ -23,10 +23,12 @@ OPENAI_MAX_TOKENS = int(os.getenv("OPENAI_MAX_TOKENS", "500"))
 
 # Cache Configuration
 CACHE_TTL = int(os.getenv("CACHE_TTL", "3600"))  # 1 hour
+REDIS_URL = os.getenv("REDIS_URL", "redis://localhost:6379")
 
 # Performance Settings
 MAX_CONCURRENT_REQUESTS = int(os.getenv("MAX_CONCURRENT_REQUESTS", "50"))
 REQUEST_TIMEOUT = int(os.getenv("REQUEST_TIMEOUT", "60"))
+RATE_LIMIT = os.getenv("RATE_LIMIT", "100/minute")
 
 # Logging
 LOG_LEVEL = os.getenv("LOG_LEVEL", "INFO")
@@ -35,3 +37,15 @@ LOG_LEVEL = os.getenv("LOG_LEVEL", "INFO")
 LANGFUSE_SECRET_KEY = os.getenv("LANGFUSE_SECRET_KEY", "")
 LANGFUSE_PUBLIC_KEY = os.getenv("LANGFUSE_PUBLIC_KEY", "")
 LANGFUSE_HOST = os.getenv("LANGFUSE_HOST", "https://api.langfuse.com")
+
+# Production Settings
+ENVIRONMENT = os.getenv("ENVIRONMENT", "development")
+DEBUG = os.getenv("DEBUG", "false").lower() == "true"
+WORKERS = int(os.getenv("WORKERS", "4"))
+
+# Comment Types (từ sentiment_analysis_fixed.py)
+COMMENT_TYPES = {
+    "fbPageComment", "fbGroupComment", "fbUserComment", "forumComment",
+    "newsComment", "youtubeComment", "tiktokComment", "snsComment",
+    "linkedinComment", "ecommerceComment", "threadsComment"
+}

@@ -1,4 +1,25 @@
 services:
+  # Redis Cache
+  redis:
+    image: redis:7-alpine
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis_data:/data
+    restart: unless-stopped
+    command: redis-server --appendonly yes --maxmemory 1gb --maxmemory-policy allkeys-lru
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+    deploy:
+      resources:
+        limits:
+          memory: 1.5G
+        reservations:
+          memory: 512M
+
   # Load Balancer với Nginx
   nginx:
     image: nginx:alpine
@@ -12,6 +33,7 @@ services:
       - sentiment-api-1
       - sentiment-api-2
       - sentiment-api-3
+      - redis
     restart: unless-stopped
     deploy:
       resources:
@@ -28,28 +50,40 @@ services:
     environment: &api-env
       - MONGO_URI=${MONGO_URI}
       - DB_NAME=${DB_NAME:-n8n}
-
       - OPENAI_API_KEY=${OPENAI_API_KEY}
+      - LLM_MODEL=${LLM_MODEL}
+      - OPENAI_URI=${OPENAI_URI}
+      - LANGFUSE_SECRET_KEY=${LANGFUSE_SECRET_KEY}
+      - LANGFUSE_PUBLIC_KEY=${LANGFUSE_PUBLIC_KEY}
+      - LANGFUSE_HOST=${LANGFUSE_HOST}
       - LOG_LEVEL=INFO
+      - ENVIRONMENT=production
+      # Redis connection
+      - REDIS_URL=redis://redis:6379
       # High-performance MongoDB settings
       - MONGO_MAX_POOL_SIZE=200
       - MONGO_MIN_POOL_SIZE=20
       - MONGO_MAX_IDLE_TIME_MS=60000
       # High concurrency settings
       - MAX_CONCURRENT_REQUESTS=100
-      - REQUEST_TIMEOUT=45
+      - REQUEST_TIMEOUT=60
+      - RATE_LIMIT=200/minute
       # Cache settings
-      - CACHE_TTL=7200
+      - CACHE_TTL=3600
       # OpenAI settings
       - OPENAI_MAX_RETRIES=5
       - OPENAI_TIMEOUT=45
       - OPENAI_MAX_TOKENS=800
+      # Production settings
+      - WORKERS=4
 
     restart: unless-stopped
+    depends_on:
+      - redis
     extra_hosts:
       - "host.docker.internal:host-gateway"
     healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:4880/health"]
+      test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
       interval: 20s
       timeout: 5s
       retries: 3
@@ -68,4 +102,7 @@ services:
     
   sentiment-api-3:
     <<: *api-service
+
+volumes:
+  redis_data:
 

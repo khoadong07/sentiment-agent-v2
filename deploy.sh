@@ -1,10 +1,9 @@
 #!/bin/bash
 
-# High-performance production deployment script for Sentiment Analysis API
-
+# Production deployment script for Sentiment Analysis API v2.0
 set -e
 
-echo "🚀 Deploying High-Performance Sentiment Analysis API to Production"
+echo "🚀 Deploying Sentiment Analysis API v2.0 to Production..."
 
 # Colors for output
 RED='\033[0;31m'
@@ -14,138 +13,169 @@ BLUE='\033[0;34m'
 NC='\033[0m' # No Color
 
 # Configuration
-COMPOSE_FILE="docker-compose.yml"
-ENV_FILE=".env"
+ENVIRONMENT=${ENVIRONMENT:-production}
+WORKERS=${WORKERS:-4}
+PORT=${PORT:-4880}
+
+echo -e "${YELLOW}Environment: $ENVIRONMENT${NC}"
+echo -e "${YELLOW}Workers: $WORKERS${NC}"
+echo -e "${YELLOW}Port: $PORT${NC}"
 
 # Check if .env file exists
-if [ ! -f "$ENV_FILE" ]; then
-    echo -e "${RED}❌ Error: .env file not found${NC}"
-    echo "Please create .env file with required environment variables:"
-    echo "OPENAI_API_KEY=your_key_here"
-    echo "MONGO_URI=your_mongodb_uri"
+if [ ! -f .env ]; then
+    echo -e "${RED}❌ .env file not found! Please create it first.${NC}"
     exit 1
 fi
 
-# Check if Docker is running
-if ! docker info > /dev/null 2>&1; then
-    echo -e "${RED}❌ Error: Docker is not running${NC}"
-    exit 1
-fi
+# Load environment variables
+source .env
 
-# Create necessary directories
-echo -e "${YELLOW}📁 Creating log directories...${NC}"
-mkdir -p logs/nginx logs/app
-
-# Set proper permissions
-chmod 755 logs/nginx logs/app
-
-# Pull latest base images
-echo -e "${YELLOW}📦 Pulling latest base images...${NC}"
-docker-compose -f $COMPOSE_FILE pull
-
-# Build with optimizations
-echo -e "${YELLOW}🔨 Building optimized images...${NC}"
-docker-compose -f $COMPOSE_FILE build --no-cache --parallel
-
-# Deploy with zero-downtime strategy
-echo -e "${YELLOW}🔄 Deploying with high-availability setup...${NC}"
-
-# Stop existing services
-docker-compose -f $COMPOSE_FILE down
-
-# Start infrastructure services first
-echo -e "${BLUE}🗄️  Starting infrastructure services...${NC}"
-docker-compose -f $COMPOSE_FILE up -d redis
-
-# Wait for infrastructure
-sleep 10
-
-# Start API instances
-echo -e "${BLUE}🚀 Starting API instances...${NC}"
-docker-compose -f $COMPOSE_FILE up -d sentiment-api-1 sentiment-api-2 sentiment-api-3
-
-# Wait for API instances
-sleep 20
-
-# Start load balancer
-echo -e "${BLUE}⚖️  Starting load balancer...${NC}"
-docker-compose -f $COMPOSE_FILE up -d nginx
-
-# Wait for all services to be ready
-echo -e "${YELLOW}⏳ Waiting for all services to be ready...${NC}"
-sleep 30
-
-# Comprehensive health checks
-echo -e "${YELLOW}🔍 Running comprehensive health checks...${NC}"
-
-# Check individual API instances
-for i in {1..3}; do
-    echo -e "${BLUE}Checking sentiment-api-$i...${NC}"
-    if docker-compose -f $COMPOSE_FILE exec -T sentiment-api-$i curl -f http://localhost:4880/health > /dev/null 2>&1; then
-        echo -e "${GREEN}✅ sentiment-api-$i is healthy${NC}"
-    else
-        echo -e "${RED}❌ sentiment-api-$i health check failed${NC}"
-        docker-compose -f $COMPOSE_FILE logs sentiment-api-$i
+# Validate required environment variables
+required_vars=("OPENAI_API_KEY" "LLM_MODEL" "OPENAI_URI" "LANGFUSE_SECRET_KEY" "LANGFUSE_PUBLIC_KEY")
+for var in "${required_vars[@]}"; do
+    if [ -z "${!var}" ]; then
+        echo -e "${RED}❌ Required environment variable $var is not set${NC}"
         exit 1
     fi
 done
 
-# Check load balancer
-echo -e "${BLUE}Checking load balancer...${NC}"
-if curl -f http://localhost/health > /dev/null 2>&1; then
-    echo -e "${GREEN}✅ Load balancer is healthy${NC}"
+echo -e "${GREEN}✅ Environment variables validated${NC}"
+
+# Create logs directory
+mkdir -p logs/nginx
+
+# Stop existing containers
+echo "🛑 Stopping existing containers..."
+docker-compose down --remove-orphans
+
+# Build new images
+echo "🔨 Building Docker images..."
+docker-compose build --no-cache
+
+# Start Redis first
+echo "🗄️ Starting Redis..."
+docker-compose up -d redis
+
+# Wait for Redis to be ready
+echo "⏳ Waiting for Redis to be ready..."
+timeout=30
+while ! docker-compose exec redis redis-cli ping > /dev/null 2>&1; do
+    sleep 1
+    timeout=$((timeout - 1))
+    if [ $timeout -eq 0 ]; then
+        echo -e "${RED}❌ Redis failed to start within 30 seconds${NC}"
+        exit 1
+    fi
+done
+echo -e "${GREEN}✅ Redis is ready${NC}"
+
+# Start API services
+echo "🚀 Starting API services..."
+docker-compose up -d sentiment-api-1 sentiment-api-2 sentiment-api-3
+
+# Wait for API services to be healthy
+echo "⏳ Waiting for API services to be healthy..."
+for service in sentiment-api-1 sentiment-api-2 sentiment-api-3; do
+    timeout=60
+    while ! docker-compose exec $service curl -f http://localhost:8000/health > /dev/null 2>&1; do
+        sleep 2
+        timeout=$((timeout - 2))
+        if [ $timeout -le 0 ]; then
+            echo -e "${RED}❌ $service failed to become healthy${NC}"
+            docker-compose logs $service
+            exit 1
+        fi
+    done
+    echo -e "${GREEN}✅ $service is healthy${NC}"
+done
+
+# Start Nginx
+echo "🌐 Starting Nginx load balancer..."
+docker-compose up -d nginx
+
+# Final health check
+echo "🏥 Performing final health check..."
+sleep 5
+
+# Check if the load balancer is working
+if curl -f http://localhost:$PORT/health > /dev/null 2>&1; then
+    echo -e "${GREEN}✅ Load balancer is working${NC}"
 else
     echo -e "${RED}❌ Load balancer health check failed${NC}"
-    docker-compose -f $COMPOSE_FILE logs nginx
+    docker-compose logs nginx
     exit 1
 fi
 
-# Check Redis
-echo -e "${BLUE}Checking Redis...${NC}"
-if docker-compose -f $COMPOSE_FILE exec -T redis redis-cli ping > /dev/null 2>&1; then
-    echo -e "${GREEN}✅ Redis is healthy${NC}"
+# Show service status
+echo ""
+echo "📊 Service Status:"
+docker-compose ps
+
+# Show resource usage
+echo ""
+echo "💻 Resource Usage:"
+docker stats --no-stream --format "table {{.Container}}\t{{.CPUPerc}}\t{{.MemUsage}}\t{{.MemPerc}}"
+
+# Test API endpoints
+echo ""
+echo "🧪 Testing API endpoints..."
+
+# Test main endpoint
+if curl -s -X POST http://localhost:$PORT/analyze \
+   -H "Content-Type: application/json" \
+   -d '{
+     "id": "deploy_test",
+     "index": "test_index", 
+     "topic": "Test",
+     "title": "Test deployment",
+     "content": "This is a test message for deployment",
+     "type": "newsComment",
+     "main_keywords": ["test"]
+   }' > /dev/null; then
+    echo -e "${GREEN}✅ /analyze endpoint working${NC}"
 else
-    echo -e "${RED}❌ Redis health check failed${NC}"
-    exit 1
+    echo -e "${RED}❌ /analyze endpoint failed${NC}"
 fi
 
-# Performance test
-echo -e "${YELLOW}⚡ Running performance test...${NC}"
-echo "Testing load balancer response times:"
-for i in {1..10}; do
-    response=$(curl -s -o /dev/null -w "%{http_code} %{time_total}s" http://localhost/health)
-    echo "  Request $i: $response"
-done
+# Test metrics endpoint
+if curl -s http://localhost:$PORT/metrics > /dev/null; then
+    echo -e "${GREEN}✅ /metrics endpoint working${NC}"
+else
+    echo -e "${RED}❌ /metrics endpoint failed${NC}"
+fi
 
-# Load test
-echo -e "${YELLOW}🔥 Running concurrent load test...${NC}"
-echo "Testing with 20 concurrent requests:"
-for i in {1..20}; do
-    curl -s -o /dev/null http://localhost/health &
-done
-wait
-echo -e "${GREEN}✅ Concurrent load test completed${NC}"
+# Show deployment info
+echo ""
+echo "🎉 Deployment completed successfully!"
+echo ""
+echo "📋 Service Information:"
+echo "  API URL: http://localhost:$PORT"
+echo "  Health Check: http://localhost:$PORT/health"
+echo "  Metrics: http://localhost:$PORT/metrics"
+echo "  Cache Stats: http://localhost:$PORT/cache/stats"
+echo "  API Docs: http://localhost:$PORT/docs (if not production)"
+echo ""
+echo "🔧 Management Commands:"
+echo "  View logs: docker-compose logs -f [service_name]"
+echo "  Scale API: docker-compose up -d --scale sentiment-api-1=2"
+echo "  Stop all: docker-compose down"
+echo "  Restart: docker-compose restart [service_name]"
+echo ""
+echo "📊 Monitoring:"
+echo "  Redis: docker-compose exec redis redis-cli monitor"
+echo "  Stats: docker stats"
+echo ""
 
-# Clean up old images
-echo -e "${YELLOW}🧹 Cleaning up old images...${NC}"
-docker image prune -f
+# Optional: Run performance test
+read -p "🧪 Run performance test? (y/N): " -n 1 -r
+echo
+if [[ $REPLY =~ ^[Yy]$ ]]; then
+    echo "🚀 Running performance test..."
+    if [ -f "test_production_api.py" ]; then
+        python3 test_production_api.py
+    else
+        echo -e "${YELLOW}⚠️ test_production_api.py not found, skipping performance test${NC}"
+    fi
+fi
 
-echo -e "${GREEN}🎉 High-Performance Deployment Completed Successfully!${NC}"
-echo ""
-echo -e "${BLUE}📊 Production Services:${NC}"
-echo "  🌐 Load Balancer: http://localhost"
-echo "  🏥 Health Check: http://localhost/health"
-echo "  📊 Nginx Status: http://localhost/nginx_status"
-echo ""
-echo -e "${BLUE}🔧 Management Commands:${NC}"
-echo "  📋 View all logs: docker-compose logs -f"
-echo "  📊 Service status: docker-compose ps"
-echo "  💻 Resource usage: docker stats"
-echo "  🔄 Restart service: docker-compose restart <service>"
-echo "  📈 Scale API: docker-compose up -d --scale sentiment-api-1=2"
-echo ""
-echo -e "${BLUE}🚨 Monitoring:${NC}"
-echo "  📈 Nginx status: http://localhost/nginx_status"
-echo "  🔍 Service logs: docker-compose logs -f"
-echo ""
-echo -e "${GREEN}✨ Your high-performance sentiment analysis API is now running!${NC}"
+echo -e "${GREEN}🎉 Deployment completed successfully!${NC}"

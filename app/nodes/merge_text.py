@@ -1,11 +1,16 @@
 import logging
+from app.constants import COMMENT_TYPES
 
 logger = logging.getLogger(__name__)
 
 def merge_text(state):
     """
     Gộp title, content, description thành một văn bản để phân tích
-    Với comment types: ưu tiên content (comment) hơn title (context)
+    
+    Logic mới:
+    - Comment types + có content: analyze_with_llm sẽ check mention trong content trước
+    - Các type khác: analyze_with_llm sẽ check mention trong merged_text
+    - Merged_text vẫn được tạo để cung cấp context đầy đủ cho LLM
     """
     try:
         input_data = state["input_data"]
@@ -17,11 +22,7 @@ def merge_text(state):
         description = (input_data.get("description") or "").strip()
         
         # Định nghĩa comment types
-        comment_types = [
-            "fbPageComment", "fbGroupComment", "fbUserComment", "forumComment",
-            "newsComment", "youtubeComment", "tiktokComment", "snsComment",
-            "linkedinComment", "ecommerceComment", "threadsComment", "comment"
-        ]
+        comment_types = COMMENT_TYPES
         
         # Xử lý khác nhau dựa trên type
         if post_type in comment_types:

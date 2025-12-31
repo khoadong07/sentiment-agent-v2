@@ -1,12 +1,9 @@
 TARGETED_ANALYSIS_PROMPT = """
-You are a Vietnamese content analysis expert. Analyze the following text and determine:
+You are a Vietnamese content analysis expert. The text has already been confirmed to mention main keywords. 
 
-1. TARGETED: Does the text mention/refer to any main_keywords?
-2. SENTIMENT: Overall emotion of the text (ONLY for user experience content)
-3. KEYWORDS: Emotional keywords found (exclude neutral to save tokens)
-4. CONFIDENCE: Analysis confidence level
+Your task: Analyze SENTIMENT and extract emotional keywords for USER EXPERIENCE content only.
 
-MAIN KEYWORDS TO CHECK: {main_keywords}
+MAIN KEYWORDS (already confirmed mentioned): {main_keywords}
 POST TYPE: {post_type}
 
 TEXT TO ANALYZE:
@@ -23,10 +20,7 @@ CRITICAL CONTENT TYPE RULES:
 
 ANALYSIS RULES:
 
-1. TARGETED (true/false):
-   - true: Text mentions at least 1 main_keyword
-   - false: Text doesn't mention any main_keywords
-   - Check exact words and similar variations
+1. TARGETED: Always true (already confirmed)
 
 2. SENTIMENT (positive/negative/neutral):
    - First determine: Is this USER EXPERIENCE content?
@@ -49,13 +43,13 @@ ANALYSIS RULES:
 
 5. EXPLANATION:
    - Brief explanation in Vietnamese (max 20 words)
-   - State clearly if main_keywords are mentioned AND if this is user experience
+   - State sentiment reason and if this is user experience
 
 IMPORTANT: Return only pure JSON, no additional text.
 
 OUTPUT FORMAT (JSON):
 {{
-  "targeted": true|false,
+  "targeted": true,
   "sentiment": "positive|negative|neutral",
   "confidence": 0.0,
   "keywords": {{

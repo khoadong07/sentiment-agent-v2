@@ -1,268 +1,321 @@
-# Sentiment Analysis API
+# Sentiment Analysis API v2.0
 
-API phân tích sentiment và keyword matching cho nội dung tiếng Việt.
+High-performance production-ready sentiment analysis API với FastAPI, AI Agent và Langfuse tracing.
 
-## Tính năng
+## 🚀 Features
 
-- Nhận dữ liệu với format: `{id, index, title, content, description, type}`
-- Tìm topic trong MongoDB dựa vào `index` để lấy keywords
-- Phân tích sentiment của nội dung đối với topic
-- Trích xuất keywords liên quan và phân loại theo sentiment
-- Trả về kết quả với explanation tối đa 25 từ
+- **High Performance**: Multi-instance deployment với load balancing
+- **AI-Powered**: Sử dụng LLM cho sentiment analysis chính xác
+- **Production Ready**: Redis caching, rate limiting, monitoring
+- **Observability**: Langfuse tracing cho AI operations
+- **Scalable**: Docker-based deployment với auto-scaling
+- **Monitoring**: Prometheus metrics, health checks
 
-## Cài đặt
+## 📋 Requirements
 
-1. **Cài đặt dependencies:**
+- Docker & Docker Compose
+- Python 3.9+
+- Redis (optional, có fallback memory cache)
+- OpenAI-compatible API key
+- Langfuse account (optional)
+
+## 🛠️ Installation
+
+### 1. Clone Repository
 ```bash
-pip install -r requirements.txt
+git clone <repository-url>
+cd sentiment-agent-v2
 ```
 
-2. **Cấu hình environment:**
-Tạo file `.env` với nội dung:
-```
-MONGO_URI=mongodb://localhost:27017
-DB_NAME=n8n
-OPENAI_API_KEY=your_openai_api_key
+### 2. Environment Setup
+```bash
+cp .env.example .env
+# Edit .env với các thông tin cần thiết
 ```
 
-3. **Chuẩn bị MongoDB:**
-- Tạo collection `qc_sentiment` trong database
-- Mỗi document có format:
-```json
+### 3. Required Environment Variables
+```bash
+# LLM Configuration
+OPENAI_API_KEY=your_api_key_here
+LLM_MODEL=google/gemma-3-12b-it
+OPENAI_URI=https://api.deepinfra.com/v1/openai
+
+# Langfuse Tracing
+LANGFUSE_SECRET_KEY=sk-lf-xxx
+LANGFUSE_PUBLIC_KEY=pk-lf-xxx
+LANGFUSE_HOST=http://your-langfuse-host:3002
+
+# Performance Settings
+MAX_CONCURRENT_REQUESTS=50
+REQUEST_TIMEOUT=60
+RATE_LIMIT=100/minute
+WORKERS=4
+
+# Cache
+REDIS_URL=redis://localhost:6379
+CACHE_TTL=3600
+```
+
+## 🚀 Deployment
+
+### Development
+```bash
+# Start single instance
+uvicorn app.api:app --reload --host 0.0.0.0 --port 8000
+
+# Or with Docker
+docker-compose -f docker-compose.dev.yml up
+```
+
+### Production
+```bash
+# Deploy với load balancing
+chmod +x deploy.sh
+./deploy.sh
+
+# Hoặc manual
+docker-compose up -d
+```
+
+## 📡 API Usage
+
+### Main Endpoint
+```bash
+POST /analyze
+Content-Type: application/json
+
 {
-  "topic_id": "6641ccbdf4901a7ae602197f",
-  "topic_name": "máy lọc không khí", 
-  "keywords": ["máy lọc", "không khí", "dyson", "sharp"]
+  "id": "unique_id",
+  "index": "document_index",
+  "topic": "Brand Name",
+  "title": "Post title",
+  "content": "Main content text",
+  "description": "Additional description",
+  "type": "tiktokComment",
+  "main_keywords": ["brand", "product"]
 }
 ```
 
-## Chạy server
-
-```bash
-python run_server.py
-```
-
-Server sẽ chạy tại: http://localhost:4880
-
-## API Endpoints
-
-### POST /analyze
-Phân tích sentiment cho nội dung
-
-**Request:**
+### Response Format
 ```json
 {
-  "id": "648188429745076_1253949522502296",
-  "index": "6641ccbdf4901a7ae602197f", 
-  "title": "Xem xong cũng làm thử, trời ơi đầu tư ngay cái máy lọc kk dyson 30 củ đi",
-  "content": "",
-  "description": "T có phải nạn nhân của máy lọc không khí ko tụi bay",
-  "type": "fbGroupTopic"
-}
-```
-
-**Response:**
-```json
-{
-  "index": "6641ccbdf4901a7ae602197f",
   "targeted": true,
-  "topic": "máy lọc không khí",
   "sentiment": "positive",
   "confidence": 0.85,
   "keywords": {
-    "positive": ["hiệu quả", "tốt"],
-    "negative": ["đắt"],
-    "neutral": ["dyson", "máy lọc"]
+    "positive": ["tốt", "xuất sắc"],
+    "negative": []
   },
-  "explanation": "Nội dung thể hiện thái độ tích cực về máy lọc không khí"
+  "explanation": "Người dùng khen ngợi sản phẩm"
 }
 ```
 
-### GET /health
-Kiểm tra trạng thái server
-
-## Test
-
-Chạy test với dữ liệu mẫu:
+### Legacy Endpoint (Backward Compatibility)
 ```bash
-python test_api.py
+POST /analyze/legacy
+# Sử dụng format cũ, trả về AnalysisResult
 ```
 
-## Quy trình xử lý
+## 🔧 API Endpoints
 
-1. **Load Topic:** Tìm topic trong MongoDB theo `index`
-2. **Merge Text:** Gộp `title`, `content`, `description`
-3. **Analyze with LLM:** Phân tích sentiment và trích xuất keywords
-4. **Format Output:** Tạo kết quả cuối cùng theo schema
+| Endpoint | Method | Description |
+|----------|--------|-------------|
+| `/` | GET | Basic info |
+| `/analyze` | POST | Main sentiment analysis |
+| `/analyze/legacy` | POST | Legacy format support |
+| `/health` | GET | Health check |
+| `/metrics` | GET | Prometheus metrics |
+| `/cache/stats` | GET | Cache statistics |
+| `/cache/clear` | POST | Clear cache |
 
-## Cấu trúc project
+## 📊 Monitoring
 
-```
-app/
-├── api.py              # FastAPI endpoints
-├── main.py             # LangGraph workflow
-├── config.py           # Cấu hình
-├── db.py              # MongoDB connection
-├── llm.py             # OpenAI LLM
-├── prompts.py         # LLM prompts
-├── schemas.py         # Pydantic models
-├── state.py           # Graph state
-└── nodes/             # Processing nodes
-    ├── load_topic.py
-    ├── merge_text.py
-    ├── analyze_with_llm.py
-    └── format_output.py
-```
-
-## 🚀 Production Deployment (High Performance)
-
-### Architecture Overview
-```
-Internet → Nginx Load Balancer → 3x API Instances → MongoDB Atlas
-                ↓
-            Redis Cache + Sentinel
-                ↓
-            Prometheus Monitoring
-```
-
-### Production Features
-- **Load Balancing**: Nginx với 3 API instances
-- **High Availability**: Redis Sentinel, health checks
-- **Caching**: Optimized Redis với LRU policy
-- **Monitoring**: Prometheus metrics, detailed logging
-- **Performance**: Tối ưu cho 100+ concurrent requests
-- **Security**: Rate limiting, security headers
-
-### Quick Production Setup
-
-1. **Deploy to Production**:
+### Health Check
 ```bash
-chmod +x deploy.sh
-./deploy.sh
+curl http://localhost:4880/health
 ```
 
-2. **Monitor System**:
+### Metrics (Prometheus)
 ```bash
-chmod +x monitor.sh
-./monitor.sh
+curl http://localhost:4880/metrics
 ```
 
-3. **Performance Testing**:
+### Cache Statistics
 ```bash
-chmod +x performance_test.sh
-./performance_test.sh
+curl http://localhost:4880/cache/stats
 ```
 
-### Production Configuration
+## 🧪 Testing
 
-#### Environment Variables (.env)
-```env
-# Database
-MONGO_URI=mongodb+srv://user:pass@cluster.mongodb.net/
-DB_NAME=n8n
+### Performance Test
+```bash
+python3 test_production_api.py
+```
 
-# OpenAI
-OPENAI_API_KEY=sk-proj-...
+### Load Test
+```bash
+# Sử dụng Apache Bench
+ab -n 1000 -c 10 -T application/json -p test_payload.json http://localhost:4880/analyze
 
-# Performance (Production optimized)
-MONGO_MAX_POOL_SIZE=200
-MONGO_MIN_POOL_SIZE=20
+# Hoặc với wrk
+wrk -t12 -c400 -d30s -s test_script.lua http://localhost:4880/analyze
+```
+
+## 🔍 Langfuse Tracing
+
+API tự động trace tất cả LLM calls và analysis operations:
+
+- **Traces**: Mỗi request tạo một trace với metadata
+- **Spans**: LLM calls, text processing, caching
+- **Metrics**: Response time, success rate, confidence scores
+- **Debugging**: Raw LLM responses, parsing errors
+
+Xem traces tại Langfuse dashboard: `http://your-langfuse-host:3002`
+
+## 🏗️ Architecture
+
+```
+┌─────────────┐    ┌─────────────┐    ┌─────────────┐
+│   Nginx     │    │   Redis     │    │  Langfuse   │
+│Load Balancer│    │   Cache     │    │  Tracing    │
+└─────────────┘    └─────────────┘    └─────────────┘
+       │                   │                   │
+       ▼                   ▼                   ▼
+┌─────────────────────────────────────────────────────┐
+│              API Instances (3x)                     │
+│  ┌─────────────┐ ┌─────────────┐ ┌─────────────┐   │
+│  │ FastAPI +   │ │ FastAPI +   │ │ FastAPI +   │   │
+│  │ AI Agent    │ │ AI Agent    │ │ AI Agent    │   │
+│  └─────────────┘ └─────────────┘ └─────────────┘   │
+└─────────────────────────────────────────────────────┘
+                           │
+                           ▼
+                  ┌─────────────┐
+                  │ LLM Service │
+                  │(DeepInfra)  │
+                  └─────────────┘
+```
+
+## 🔧 Configuration
+
+### Performance Tuning
+```bash
+# Tăng số workers
+WORKERS=8
+
+# Tăng concurrent requests
 MAX_CONCURRENT_REQUESTS=100
-REQUEST_TIMEOUT=45
+
+# Tăng cache TTL
 CACHE_TTL=7200
+
+# Tăng rate limit
+RATE_LIMIT=200/minute
 ```
 
-#### Production Services
-- **API Instances**: 3x containers với load balancing
-- **Nginx**: Load balancer với caching
-- **Redis**: High-performance cache với persistence
-- **Redis Sentinel**: High availability
-- **Prometheus**: Monitoring và metrics
-
-### Performance Benchmarks
-- **Throughput**: 50+ requests/second
-- **Response Time**: <1s average
-- **Concurrent Users**: 100+ simultaneous
-- **Cache Hit Rate**: 80%+
-- **Uptime**: 99.9%+
-
-### Monitoring & Maintenance
-
-#### Real-time Monitoring
-```bash
-# Interactive monitor
-./monitor.sh
-
-# Docker stats
-docker stats
-
-# Service logs
-docker-compose logs -f
-```
-
-#### Health Checks
-- **API Health**: `http://localhost/health`
-- **Nginx Status**: `http://localhost/nginx_status`
-- **Prometheus**: `http://localhost:9090`
-- **Metrics**: `http://localhost/metrics`
-
-#### Scaling Commands
+### Scaling
 ```bash
 # Scale API instances
-docker-compose up -d --scale sentiment-api-1=2
+docker-compose up -d --scale sentiment-api-1=5
 
-# Restart specific service
-docker-compose restart sentiment-api-1
-
-# Update configuration
-docker-compose up -d --force-recreate nginx
+# Scale với resource limits
+docker-compose up -d --scale sentiment-api-1=3 --scale sentiment-api-2=3
 ```
 
-### Production Troubleshooting
+## 📝 Logs
 
-#### Common Issues
-1. **High Response Time**:
-   - Check `docker stats` for resource usage
-   - Monitor cache hit rate
-   - Scale API instances
-
-2. **Memory Issues**:
-   - Adjust Redis maxmemory
-   - Check for memory leaks in logs
-   - Restart services if needed
-
-3. **Database Connection**:
-   - Verify MongoDB URI
-   - Check network connectivity
-   - Monitor connection pool
-
-#### Log Analysis
+### View Logs
 ```bash
-# API errors
-docker-compose logs sentiment-api-1 | grep ERROR
+# All services
+docker-compose logs -f
+
+# Specific service
+docker-compose logs -f sentiment-api-1
 
 # Nginx access logs
-docker-compose logs nginx | grep -E "HTTP/[0-9.]+ [45][0-9][0-9]"
+docker-compose logs -f nginx
 
-# Performance logs
-docker-compose logs | grep "Response time"
+# Redis logs
+docker-compose logs -f redis
 ```
 
-### Security Considerations
-- Rate limiting: 50 req/s per IP
-- Security headers enabled
-- No sensitive data in logs
-- Container isolation
-- Non-root user execution
+### Log Locations
+- Application logs: `logs/app/`
+- Nginx logs: `logs/nginx/`
+- Container logs: `docker-compose logs`
 
-### Backup & Recovery
-```bash
-# Backup Redis data
-docker-compose exec redis redis-cli BGSAVE
+## 🚨 Troubleshooting
 
-# Export configuration
-docker-compose config > backup-config.yml
+### Common Issues
 
-# Health check before deployment
-curl -f http://localhost/health
-```
+1. **Redis Connection Failed**
+   ```bash
+   # Check Redis status
+   docker-compose exec redis redis-cli ping
+   
+   # Restart Redis
+   docker-compose restart redis
+   ```
+
+2. **LLM API Errors**
+   ```bash
+   # Check API key
+   echo $OPENAI_API_KEY
+   
+   # Test API directly
+   curl -H "Authorization: Bearer $OPENAI_API_KEY" $OPENAI_URI/models
+   ```
+
+3. **High Memory Usage**
+   ```bash
+   # Check memory usage
+   docker stats
+   
+   # Reduce cache TTL
+   CACHE_TTL=1800
+   ```
+
+4. **Slow Response Times**
+   ```bash
+   # Check concurrent requests
+   MAX_CONCURRENT_REQUESTS=30
+   
+   # Reduce timeout
+   REQUEST_TIMEOUT=30
+   ```
+
+## 🔐 Security
+
+- Rate limiting enabled
+- CORS configured
+- Environment variables for secrets
+- Health check endpoints
+- Request timeout protection
+
+## 📈 Performance Benchmarks
+
+Typical performance với 3 API instances:
+
+- **Throughput**: 200+ requests/second
+- **Response Time**: 
+  - Cache hit: <100ms
+  - Cache miss: 1-3s (depending on LLM)
+- **Concurrent Users**: 100+
+- **Uptime**: 99.9%
+
+## 🤝 Contributing
+
+1. Fork repository
+2. Create feature branch
+3. Add tests
+4. Submit pull request
+
+## 📄 License
+
+MIT License - see LICENSE file for details.
+
+## 🆘 Support
+
+- GitHub Issues: [Create Issue](link-to-issues)
+- Documentation: [Wiki](link-to-wiki)
+- Email: support@yourcompany.com

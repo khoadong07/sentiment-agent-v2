@@ -3,8 +3,33 @@ import logging
 import re
 from app.llm import llm
 from app.prompts import TARGETED_ANALYSIS_PROMPT
+from app.constants import COMMENT_TYPES
 
 logger = logging.getLogger(__name__)
+
+def check_keyword_mention(text: str, main_keywords: list) -> bool:
+    """
+    Kiểm tra xem text có mention đến bất kỳ main keyword nào không
+    """
+    if not text or not main_keywords:
+        return False
+    
+    # Normalize text để so sánh
+    text_lower = text.lower()
+    
+    # Check từng keyword
+    for keyword in main_keywords:
+        if not keyword:
+            continue
+            
+        keyword_lower = keyword.lower().strip()
+        
+        # Check exact match và partial match
+        if keyword_lower in text_lower:
+            logger.info(f"Found mention of keyword: '{keyword}' in text")
+            return True
+    
+    return False
 
 def get_invoke_config():
     """
@@ -19,13 +44,17 @@ def get_invoke_config():
 
 def analyze_with_llm(state):
     """
-    Sử dụng LLM để xác định targeted và phân tích sentiment
+    Sử dụng LLM để xác định targeted và phân tích sentiment với logic mới:
+    - Comment types + có content: Check content có mention main keyword không
+    - Các type khác: Check merged text có mention main keyword không
+    - Nếu không mention → neutral (không trả keyword)
     """
     try:
         input_data = state["input_data"]
         merged_text = state["merged_text"]
         main_keywords = input_data.get("main_keywords", [])
         post_type = input_data.get("type", "")
+        content = (input_data.get("content") or "").strip()
         
         # Nếu không có main_keywords, trả về targeted = False
         if not main_keywords:
@@ -39,10 +68,40 @@ def analyze_with_llm(state):
                 "index": input_data.get("index", "")
             }}
         
-        # Tạo prompt với main_keywords và post_type
+        # Định nghĩa comment types
+        comment_types = COMMENT_TYPES
+        
+        # Xác định text để check mention keyword
+        text_to_check = ""
+        if post_type in comment_types and content:
+            # Comment type + có content → chỉ check content
+            text_to_check = content
+            logger.info(f"Comment type với content, check mention trong content: {len(content)} ký tự")
+        else:
+            # Các type khác → check merged text
+            text_to_check = merged_text
+            logger.info(f"Non-comment type hoặc không có content, check mention trong merged text: {len(merged_text)} ký tự")
+        
+        # Check mention keyword trước khi gọi LLM
+        has_mention = check_keyword_mention(text_to_check, main_keywords)
+        
+        if not has_mention:
+            # Không mention → trả về neutral ngay, không cần gọi LLM
+            logger.info(f"Không có mention main keywords trong text, trả về neutral")
+            return {**state, "llm_analysis": {
+                "sentiment": "neutral",
+                "targeted": False,
+                "keywords": {"positive": [], "negative": []},
+                "confidence": 0.0,
+                "explanation": "Không mention đến main keywords",
+                "index": input_data.get("index", "")
+            }}
+        
+        # Có mention → gọi LLM để đánh sentiment
+        logger.info(f"Có mention main keywords, tiến hành phân tích sentiment với LLM")
         prompt = TARGETED_ANALYSIS_PROMPT.format(
             main_keywords=", ".join(main_keywords),
-            text=merged_text,
+            text=merged_text,  # Vẫn dùng merged_text cho LLM để có context đầy đủ
             post_type=post_type
         )
         
@@ -51,10 +110,16 @@ def analyze_with_llm(state):
         response = llm.invoke(prompt, config=config)
         analysis_result = parse_llm_response(response.content)
         
-        # Đảm bảo có đầy đủ fields
+        # Đảm bảo targeted = True vì đã check mention
+        analysis_result["targeted"] = True
         analysis_result["index"] = input_data.get("index", "")
         
-        logger.info(f"LLM analysis completed - targeted: {analysis_result.get('targeted', False)}, type: {post_type}")
+        # Nếu sentiment là neutral, không trả về keywords
+        if analysis_result.get("sentiment") == "neutral":
+            analysis_result["keywords"] = {"positive": [], "negative": []}
+            logger.info("Sentiment neutral, xóa keywords")
+        
+        logger.info(f"LLM analysis completed - targeted: True, sentiment: {analysis_result.get('sentiment')}, type: {post_type}")
         
         return {**state, "llm_analysis": analysis_result}
         

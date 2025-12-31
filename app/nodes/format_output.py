@@ -1,5 +1,6 @@
 import logging
 import json
+from app.constants import COMMENT_TYPES, TOPIC_TYPES, NEWS_TOPIC_TYPE
 
 logger = logging.getLogger(__name__)
 
@@ -49,17 +50,32 @@ def format_output(state):
         # Lấy sentiment / confidence / keywords / explanation từ llm_analysis
         sentiment = llm_analysis.get("sentiment", "neutral") if isinstance(llm_analysis, dict) else "neutral"
         confidence = float(llm_analysis.get("confidence", 0.0)) if isinstance(llm_analysis, dict) else 0.0
-        keywords = llm_analysis.get("keywords", []) if isinstance(llm_analysis, dict) else []
+        keywords = llm_analysis.get("keywords", {}) if isinstance(llm_analysis, dict) else {}
         llm_explanation = llm_analysis.get("explanation", "") if isinstance(llm_analysis, dict) else ""
         final_explanation = llm_explanation or explanation
 
         content_type = input_data.get("type", "")
 
-        # ✅ NẾU TARGETED = FALSE → SENTIMENT = NEUTRAL + GIẢI THÍCH RÕ RÀNG
+        # ✅ NẾU TARGETED = FALSE → SENTIMENT = NEUTRAL + KHÔNG TRẢ KEYWORDS
         if not targeted:
             sentiment = "neutral"
             confidence = 0.0
-            final_explanation = "Nội dung không target trực tiếp đến chủ thể được quan tâm"
+            keywords = {"positive": [], "negative": []}
+            final_explanation = "Nội dung không mention đến main keywords"
+        
+        # ✅ NẾU SENTIMENT = NEUTRAL → KHÔNG TRẢ KEYWORDS
+        elif sentiment == "neutral":
+            keywords = {"positive": [], "negative": []}
+        
+        # Đảm bảo keywords có format đúng
+        if not isinstance(keywords, dict):
+            keywords = {"positive": [], "negative": []}
+        else:
+            # Đảm bảo có đầy đủ keys
+            if "positive" not in keywords:
+                keywords["positive"] = []
+            if "negative" not in keywords:
+                keywords["negative"] = []
 
         result = {
             "index": llm_analysis.get("index", "") if isinstance(llm_analysis, dict) else "",
@@ -105,27 +121,15 @@ def calculate_log_level(sentiment, content_type, targeted):
         return 0
     
     # Comment types → log_level = 1 (không cần kiểm tra targeted)
-    comment_types = [
-        "fbPageComment", "fbGroupComment", "fbUserComment", "forumComment",
-        "newsComment", "youtubeComment", "tiktokComment", "snsComment",
-        "linkedinComment", "ecommerceComment", "threadsComment"
-    ]
-    
-    if content_type in comment_types:
+    if content_type in COMMENT_TYPES:
         return 1
     
     # Topic types + targeted → log_level = 2
-    topic_types = [
-        "fbPageTopic", "fbGroupTopic", "fbUserTopic", "forumTopic",
-        "youtubeTopic", "tiktokTopic", "snsTopic", "linkedinTopic",
-        "ecommerceTopic", "threadsTopic"
-    ]
-    
-    if content_type in topic_types and targeted:
+    if content_type in TOPIC_TYPES and targeted:
         return 2
     
     # newsTopic + targeted → log_level = 3
-    if content_type == "newsTopic" and targeted:
+    if content_type == NEWS_TOPIC_TYPE and targeted:
         return 3
     
     return 0
